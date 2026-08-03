@@ -568,6 +568,13 @@ public class AiCareerArtifactGenerator : ICareerArtifactGenerator
             sb.AppendLine("Dependencies: " + string.Join(", ",
                 r.Packages.Select(p => p.Name).Distinct().Take(40)));
 
+        if (r.TestFileCount > 0)
+            sb.AppendLine($"Tests: {r.TestFileCount} test file(s)" +
+                (string.IsNullOrEmpty(r.TestFramework) ? "" : $" using {r.TestFramework}"));
+
+        if (r.DependencyNotes.Count > 0)
+            sb.AppendLine("Dependency notes: " + string.Join(" ", r.DependencyNotes));
+
         var dirs = r.AllPaths
             .Select(p => p.Split('/')[0])
             .Distinct(StringComparer.OrdinalIgnoreCase)

@@ -318,6 +318,12 @@ public static class RepoAnalyzer
             Signals = signals.Select(s => new MaturitySignal { Label = s.Label, Present = s.Present }).ToList()
         };
 
+        // --- Phase 9: test detection + dependency hygiene ---
+        var (testCount, testFw) = EvidenceExtras.DetectTests(paths, result.Packages);
+        result.TestFileCount = testCount;
+        result.TestFramework = testFw;
+        result.DependencyNotes = EvidenceExtras.DependencyNotes(result.Packages);
+
         // --- Thin-repo coaching: concrete, plain-language ways to strengthen the repo ---
         var tips = new List<string>();
         if (!result.HasReadme)

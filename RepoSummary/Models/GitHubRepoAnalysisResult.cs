@@ -35,6 +35,14 @@ public class GitHubRepoAnalysisResult
     public List<string> CommitInsights { get; set; } = new();
     public RepoMaturity? Maturity { get; set; }
 
+    // --- Phase 9: richer evidence ---
+    /// <summary>Number of files that look like tests.</summary>
+    public int TestFileCount { get; set; }
+    /// <summary>Detected test framework (xUnit, pytest, Jest, …), if identifiable.</summary>
+    public string? TestFramework { get; set; }
+    /// <summary>Honest, registry-free dependency-hygiene notes (pin rate, pre-1.0 count).</summary>
+    public List<string> DependencyNotes { get; set; } = new();
+
     public string? ReadmeContent { get; set; }
     public bool HasReadme => !string.IsNullOrWhiteSpace(ReadmeContent);
 

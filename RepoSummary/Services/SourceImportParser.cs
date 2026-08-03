@@ -28,6 +28,14 @@ public static class SourceImportParser
         new(@"^\s*require(?:_relative)?\s+['""]([^'""]+)['""]", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex Rust =
         new(@"^\s*use\s+([A-Za-z0-9_:]+)", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex Php =
+        new(@"^\s*use\s+([A-Za-z0-9_\\]+)", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex CFamily =
+        new(@"^\s*#\s*include\s+[<""]([^>""]+)[>""]", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex Swift =
+        new(@"^\s*import\s+([A-Za-z0-9_.]+)", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex Elixir =
+        new(@"^\s*(?:alias|import|require|use)\s+([A-Z][A-Za-z0-9_.]+)", RegexOptions.Compiled | RegexOptions.Multiline);
 
     /// <summary>Returns the distinct import targets referenced by a file (raw, as written).</summary>
     public static List<string> ExtractImports(string path, string content)
@@ -59,6 +67,21 @@ public static class SourceImportParser
                 break;
             case ".rs":
                 foreach (Match m in Rust.Matches(content)) Add(found, m.Groups[1].Value);
+                break;
+            case ".php":
+                foreach (Match m in Php.Matches(content)) Add(found, m.Groups[1].Value);
+                break;
+            case ".c" or ".cc" or ".cpp" or ".h" or ".hpp" or ".hh" or ".cxx":
+                foreach (Match m in CFamily.Matches(content)) Add(found, m.Groups[1].Value);
+                break;
+            case ".swift":
+                foreach (Match m in Swift.Matches(content)) Add(found, m.Groups[1].Value);
+                break;
+            case ".scala":
+                foreach (Match m in Swift.Matches(content)) Add(found, m.Groups[1].Value);   // import foo.bar (no semicolon)
+                break;
+            case ".ex" or ".exs":
+                foreach (Match m in Elixir.Matches(content)) Add(found, m.Groups[1].Value);
                 break;
         }
 

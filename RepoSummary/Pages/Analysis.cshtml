@@ -4,8 +4,9 @@
     ViewData["Title"] = Model.Result is not null ? Model.Result.FullName : "Analysis";
     // GitHub's language-dot palette, used for the language bar + legend.
     string[] palette = { "#3178c6", "#f1e05a", "#e34c26", "#563d7c", "#89e051", "#dea584", "#178600", "#858585" };
-    // Phase 8 architecture diagram — built once; also gates loading the (large) Mermaid library.
+    // Phase 8 architecture diagram + Phase 9 ER diagram — built once; also gate the Mermaid library.
     var pageMermaid = Model.Result is null ? null : RepoSummary.Services.ArchitectureDiagram.BuildMermaid(Model.Result);
+    var pageErDiagram = Model.Result is null ? null : RepoSummary.Services.EntityDiagram.BuildMermaid(Model.Result);
 
     string SelectLabel(string type) => type switch
     {
@@ -131,7 +132,8 @@ else
     var showSignals = r.ArchitecturePattern is not null || r.DatabaseTech is not null
         || r.ControllerCount > 0 || r.HasOpenApi || r.Workflows.Count > 0
         || r.SecurityTools.Count > 0 || r.ReleaseCount is > 0
-        || r.CommitInsights.Count > 0 || !string.IsNullOrEmpty(r.License);
+        || r.CommitInsights.Count > 0 || !string.IsNullOrEmpty(r.License)
+        || r.TestFileCount > 0 || r.DependencyNotes.Count > 0;
 
     var resumeArtifacts = Model.Artifacts?.Where(a => ResumeArtifactTypes.Contains(a.ArtifactType)).ToList() ?? new();
     var interviewArtifacts = Model.Artifacts?.Where(a => InterviewArtifactTypes.Contains(a.ArtifactType)).ToList() ?? new();
@@ -515,6 +517,17 @@ else
                     </div>
                 }
 
+                @if (!string.IsNullOrEmpty(pageErDiagram))
+                {
+                    <div class="card">
+                        <h2>Data model</h2>
+                        <p class="hint">Entities and relationships inferred from the model classes in the key source files.</p>
+                        <div class="mermaid-wrap">
+                            <pre class="mermaid">@pageErDiagram</pre>
+                        </div>
+                    </div>
+                }
+
                 @if (r.KeyFiles.Count > 0)
                 {
                     <div class="card">
@@ -636,9 +649,17 @@ else
                                     </dd>
                                 </div>
                             }
+                            @if (r.TestFileCount > 0)
+                            {
+                                <div><dt>Tests</dt><dd>@r.TestFileCount test file@(r.TestFileCount == 1 ? "" : "s")@(string.IsNullOrEmpty(r.TestFramework) ? "" : $" · {r.TestFramework}")</dd></div>
+                            }
                             @if (r.SecurityTools.Count > 0)
                             {
                                 <div><dt>Security</dt><dd>@string.Join(", ", r.SecurityTools)</dd></div>
+                            }
+                            @if (r.DependencyNotes.Count > 0)
+                            {
+                                <div><dt>Dependency notes</dt><dd>@string.Join(" ", r.DependencyNotes)</dd></div>
                             }
                             @if (!string.IsNullOrEmpty(r.License))
                             {
@@ -833,7 +854,7 @@ else
 
 @section Scripts {
     @* Mermaid is ~3MB, so only load it when this repo actually has a diagram to render. *@
-    @if (!string.IsNullOrEmpty(pageMermaid))
+    @if (!string.IsNullOrEmpty(pageMermaid) || !string.IsNullOrEmpty(pageErDiagram))
     {
         <script src="~/lib/mermaid.min.js" asp-append-version="true" defer></script>
     }

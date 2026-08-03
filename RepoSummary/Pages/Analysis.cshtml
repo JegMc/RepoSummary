@@ -1,0 +1,831 @@
+@page
+@model AnalysisModel
+@{
+    ViewData["Title"] = Model.Result is not null ? Model.Result.FullName : "Analysis";
+    // GitHub's language-dot palette, used for the language bar + legend.
+    string[] palette = { "#3178c6", "#f1e05a", "#e34c26", "#563d7c", "#89e051", "#dea584", "#178600", "#858585" };
+    // Phase 8 architecture diagram — built once; also gates loading the (large) Mermaid library.
+    var pageMermaid = Model.Result is null ? null : RepoSummary.Services.ArchitectureDiagram.BuildMermaid(Model.Result);
+
+    string SelectLabel(string type) => type switch
+    {
+        "ResumeBullet" => "Résumé bullets",
+        "InterviewStory" => "Interview story (STAR)",
+        "ProjectSummary" => "Project summary",
+        "CoverLetter" => "Cover letter",
+        "LinkedInAbout" => "LinkedIn “About”",
+        "TechnicalCaseStudy" => "Technical case study",
+        "ReadmeImprovements" => "README improvements",
+        "FullReadme" => "Full README draft",
+        "LikelyQuestions" => "Likely questions about this repo",
+        _ => type
+    };
+
+    // Which generated artifact types belong to each prep workspace.
+    string[] ResumeArtifactTypes = { "ResumeBullet", "ProjectSummary", "CoverLetter", "LinkedInAbout", "TechnicalCaseStudy", "ReadmeImprovements", "FullReadme", "HireabilityTips" };
+    string[] InterviewArtifactTypes = { "InterviewStory", "LikelyQuestions", "JobFitGaps" };
+    string[] ResumeSelectable = { "ResumeBullet", "ProjectSummary", "CoverLetter", "LinkedInAbout", "TechnicalCaseStudy", "ReadmeImprovements", "FullReadme" };
+
+    // Sticky form state: reflect the posted selection only for the workspace that was submitted.
+    bool Chk(string cat, string type, bool dflt) => Model.GenCategory == cat ? Model.Options.Types.Contains(type) : dflt;
+    string ToneOf(string cat) => Model.GenCategory == cat ? Model.Options.Tone : "balanced";
+    string JdOf(string cat) => Model.GenCategory == cat ? (Model.Options.JobDescription ?? "") : "";
+    bool JdOpen(string cat) => Model.GenCategory == cat && Model.Options.HasJob;
+    // Auto-expand the advanced options only when there's a reason to (a job description was used,
+    // or the last attempt errored) — otherwise the form stays clean with just the Generate button.
+    bool AdvOpen(string cat) => Model.GenCategory == cat && (Model.Options.HasJob || !string.IsNullOrEmpty(Model.GenerationError));
+
+    // Short monogram shown in the coloured tech-icon badge next to each language.
+    string TechCode(string lang) => lang switch
+    {
+        "C#" => "C#", "JavaScript" => "JS", "TypeScript" => "TS", "Python" => "Py",
+        "Java" => "Jv", "Go" => "Go", "Ruby" => "Rb", "PHP" => "PHP", "HTML" => "<>",
+        "CSS" => "CSS", "SCSS" => "Sc", "C++" => "C++", "C" => "C", "Rust" => "Rs",
+        "Shell" => "sh", "Kotlin" => "Kt", "Swift" => "Sw", "Dart" => "Dt", "Vue" => "V",
+        "Dockerfile" => "Dk", "Jupyter Notebook" => "Jy",
+        _ => lang.Length >= 2 ? lang[..2] : lang
+    };
+
+    // "How to turn this checklist item green": the points it adds, a one-line why, and concrete
+    // step-by-step instructions. Derived here (not stored on the result) so it also works when
+    // re-opening older saved snapshots that predate this guidance.
+    (int Pts, string Why, string[] Steps) HowTo(string label) => label switch
+    {
+        "README" => (15, "It's the first thing anyone — including an interviewer — opens.", new[]
+        {
+            "Create a file named README.md at the root of the repo.",
+            "Open with one sentence on what the project does and why you built it.",
+            "Add a “Tech stack” line and a “Getting started” section with the exact commands to install and run it locally.",
+            "Optional but strong: add a screenshot or short demo GIF near the top."
+        }),
+        "Description" => (5, "It shows in search results and at the top of the repo page.", new[]
+        {
+            "Open the repo's main page on GitHub.",
+            "Click the gear icon next to “About” in the top-right.",
+            "Write a one-sentence description of what the project does, then Save changes."
+        }),
+        "Automated tests" => (20, "The single strongest signal that you care about correctness.", new[]
+        {
+            "Add a test project or a tests/ folder using your language's standard framework (xUnit, pytest, Jest, …).",
+            "Write a few tests for your core logic — start with the main happy path.",
+            "Use a conventional name (tests/, *_test, *.spec) so it's detected automatically.",
+            "Run them locally to confirm they pass, then commit."
+        }),
+        "CI / CD" => (20, "A green check on every commit proves the project actually builds and works.", new[]
+        {
+            "Create a file at .github/workflows/ci.yml in your repo.",
+            "Add a job that checks out the code, installs dependencies, builds, and runs your tests.",
+            "Commit and push — GitHub Actions runs it automatically and shows a ✓/✗ on each commit.",
+            "Tip: the repo's “Actions” tab has ready-made starter templates for your language."
+        }),
+        "License" => (10, "It tells others — and employers — how they're allowed to use your code.", new[]
+        {
+            "On GitHub, click “Add file → Create new file”.",
+            "Name the file LICENSE — a “Choose a license template” button appears.",
+            "Pick one (MIT is a common permissive default) and commit it."
+        }),
+        "Tagged releases" => (10, "Shows you can ship finished, versioned work rather than an open-ended WIP.", new[]
+        {
+            "Make sure your main branch is in a working state.",
+            "Tag a commit: run git tag v1.0.0 && git push --tags (or use the Releases UI).",
+            "On GitHub, open the “Releases” tab → “Draft a new release”, choose the tag, add notes, and publish."
+        }),
+        "Changelog" => (5, "Signals deliberate, ongoing iteration on the project.", new[]
+        {
+            "Create a CHANGELOG.md at the repo root.",
+            "Add a section per version, newest first, listing what changed.",
+            "Follow the “Keep a Changelog” format if you want a clean, recognisable convention."
+        }),
+        "Security tooling" => (10, "Shows you think about dependency and vulnerability hygiene.", new[]
+        {
+            "Open the repo's Settings → “Code security and analysis”.",
+            "Enable Dependabot alerts (and optionally CodeQL code scanning).",
+            "Optional: add a SECURITY.md describing how to report a vulnerability."
+        }),
+        "Docs" => (5, "Deeper docs read as a maintainable, real project.", new[]
+        {
+            "Add a docs/ folder at the repo root.",
+            "Write a short architecture overview plus setup/usage notes as Markdown files.",
+            "Link to them from your README so they're easy to find."
+        }),
+        _ => (0, "", System.Array.Empty<string>())
+    };
+}
+
+<a class="back-link" asp-page="/Index">
+    <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"></path></svg>
+    Analyze another repository
+</a>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger">@Model.ErrorMessage</div>
+}
+else if (Model.Result is null)
+{
+    <div class="alert alert-danger">No analysis to show.</div>
+}
+else
+{
+    var r = Model.Result;
+    var showSignals = r.ArchitecturePattern is not null || r.DatabaseTech is not null
+        || r.ControllerCount > 0 || r.HasOpenApi || r.Workflows.Count > 0
+        || r.SecurityTools.Count > 0 || r.ReleaseCount is > 0
+        || r.CommitInsights.Count > 0 || !string.IsNullOrEmpty(r.License);
+
+    var resumeArtifacts = Model.Artifacts?.Where(a => ResumeArtifactTypes.Contains(a.ArtifactType)).ToList() ?? new();
+    var interviewArtifacts = Model.Artifacts?.Where(a => InterviewArtifactTypes.Contains(a.ArtifactType)).ToList() ?? new();
+
+    // Unchecked maturity signals + the total points they represent — drives "Raise your grade".
+    var missing = r.Maturity?.Signals.Where(s => !s.Present).ToList() ?? new();
+    var missingPotential = missing.Sum(s => HowTo(s.Label).Pts);
+
+    @if (Model.IsSaved)
+    {
+        <div class="saved-banner">
+            <span>Viewing a saved snapshot@(Model.SavedAt is not null ? $" from {Model.SavedAt.Value.ToLocalTime():MMM d, yyyy}" : "").</span>
+            <a asp-page="/Analysis" asp-route-owner="@r.Owner" asp-route-repo="@r.Name">Re-analyze for fresh data →</a>
+        </div>
+    }
+
+    <!-- Repo header (always visible) -->
+    <header class="repo-head">
+        <h1 class="repo-title">
+            <svg height="18" viewBox="0 0 16 16" width="18" aria-hidden="true"><path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.249.249 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z"></path></svg>
+            @if (!string.IsNullOrEmpty(r.HtmlUrl))
+            {
+                <a class="owner" href="@r.HtmlUrl" target="_blank" rel="noopener">@r.Owner</a>
+                <span class="sep">/</span>
+                <a class="name" href="@r.HtmlUrl" target="_blank" rel="noopener">@r.Name</a>
+            }
+            else
+            {
+                <span class="owner">@r.Owner</span>
+                <span class="sep">/</span>
+                <span class="name">@r.Name</span>
+            }
+            <span class="label">Public</span>
+        </h1>
+
+        @if (!string.IsNullOrWhiteSpace(r.Description))
+        {
+            <p class="lead">@r.Description</p>
+        }
+
+        <div class="repo-meta">
+            <span class="counter">
+                <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"></path></svg>
+                <strong>@r.Stars.ToString("N0")</strong> stars
+            </span>
+            <span class="counter">
+                <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true"><path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"></path></svg>
+                <strong>@r.Forks.ToString("N0")</strong> forks
+            </span>
+            <span class="counter">
+                <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"></path><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"></path></svg>
+                <strong>@r.OpenIssues.ToString("N0")</strong> open issues
+            </span>
+            @if (r.UpdatedAt is not null)
+            {
+                <span class="meta-note">Updated @r.UpdatedAt.Value.ToString("MMM d, yyyy")</span>
+            }
+        </div>
+
+        <div class="repo-actions no-print">
+            <a class="btn" asp-page="/Card" asp-route-owner="@r.Owner" asp-route-repo="@r.Name">
+                <svg height="15" viewBox="0 0 16 16" width="15" aria-hidden="true" fill="currentColor"><path d="M1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75C0 1.784.784 1 1.75 1ZM1.5 2.75v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25ZM3 5.5h6a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5Zm0 3h6a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5Z"></path></svg>
+                Health card
+            </a>
+            <button class="btn" type="button" data-print>Save as PDF</button>
+        </div>
+    </header>
+
+    <!-- Project maturity score (always visible summary) -->
+    @if (r.Maturity is not null)
+    {
+        <div class="card maturity">
+            <div class="maturity-head">
+                <div class="grade grade-@r.Maturity.Grade.ToLowerInvariant()">@r.Maturity.Grade</div>
+                <div>
+                    <h2>Project maturity</h2>
+                    <p class="hint"><strong>@r.Maturity.Score / 100</strong> — a quick read on how production-ready this repo looks.</p>
+                </div>
+            </div>
+            <div class="signals">
+                @foreach (var s in r.Maturity.Signals)
+                {
+                    <span class="signal @(s.Present ? "on" : "off")">
+                        <span class="sig-ic">@(s.Present ? "✓" : "○")</span>@s.Label
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Tabbed sections -->
+    <div class="tabs" data-tabs>
+        <div class="tabnav" role="tablist" aria-label="Analysis sections">
+            <button class="tab-btn" type="button" role="tab" id="t-resume" data-tab="resume" aria-selected="false" data-active="@(Model.ActiveTab == "resume" ? "true" : null)">Résumé prep</button>
+            <button class="tab-btn" type="button" role="tab" id="t-interview" data-tab="interview" aria-selected="false" data-active="@(Model.ActiveTab == "interview" ? "true" : null)">Interview prep</button>
+            @if (r.Maturity is not null && missing.Count > 0)
+            {
+                <button class="tab-btn" type="button" role="tab" id="t-grade" data-tab="grade" aria-selected="false">Raise your grade <span class="tab-badge">@missing.Count</span></button>
+            }
+            <button class="tab-btn" type="button" role="tab" id="t-evidence" data-tab="evidence" aria-selected="false">Evidence</button>
+            <button class="tab-btn" type="button" role="tab" id="t-ask" data-tab="ask" aria-selected="false">Ask this repo</button>
+            @if (r.TopLevelItems.Count > 0)
+            {
+                <button class="tab-btn" type="button" role="tab" id="t-files" data-tab="files" aria-selected="false">Files</button>
+            }
+            @if (r.HasReadme)
+            {
+                <button class="tab-btn" type="button" role="tab" id="t-readme" data-tab="readme" aria-selected="false">README</button>
+            }
+        </div>
+
+        <div class="tabpanels">
+            <!-- RÉSUMÉ PREP -->
+            <section class="tabpanel" role="tabpanel" data-panel="resume" aria-labelledby="t-resume" tabindex="0">
+                <div class="card" id="generate-resume">
+                    <h2>Résumé &amp; profile material</h2>
+                    <p class="hint">Résumé bullets, a project summary, a cover letter, and a LinkedIn blurb — grounded only in this repo, each citing its evidence, and editable before you copy.</p>
+
+                    @if (!string.IsNullOrEmpty(Model.GenerationError) && Model.GenCategory == "resume")
+                    {
+                        <div class="alert alert-danger">@Model.GenerationError</div>
+                    }
+
+                    @if (!Model.AiConfigured)
+                    {
+                        <div class="alert alert-info">
+                            <strong>One-time setup:</strong> AI writing needs your own OpenAI or Anthropic key — add it on the
+                            Settings page (stored encrypted, takes effect immediately). Everything else here is free.
+                        </div>
+                        <a class="btn btn-primary" asp-page="/Settings" asp-route-returnUrl="@(Request.Path + Request.QueryString)">Add an API key in Settings →</a>
+                    }
+                    else
+                    {
+                        <form method="post" asp-page-handler="Generate" data-loading="Generating…" class="gen-form">
+                            <input type="hidden" name="owner" value="@r.Owner" />
+                            <input type="hidden" name="repo" value="@r.Name" />
+                            <input type="hidden" name="GenCategory" value="resume" />
+
+                            <details class="gen-advanced" open="@AdvOpen("resume")">
+                                <summary>Customize <span class="gen-advanced-sub">— pick outputs, tone, or tailor to a job</span></summary>
+                                <div class="gen-advanced-body">
+                                    <fieldset class="gen-group">
+                                        <legend>What to generate</legend>
+                                        <div class="gen-checks">
+                                            @foreach (var t in ResumeSelectable)
+                                            {
+                                                if (t == "ReadmeImprovements" && !r.HasReadme) { continue; }
+                                                <label class="gen-check">
+                                                    <input type="checkbox" name="GenTypes" value="@t" checked="@Chk("resume", t, t == "ResumeBullet" || t == "ProjectSummary")" />
+                                                    @SelectLabel(t)
+                                                </label>
+                                            }
+                                        </div>
+                                    </fieldset>
+
+                                    <fieldset class="gen-group">
+                                        <legend>Tone</legend>
+                                        <div class="gen-checks">
+                                            <label class="gen-check"><input type="radio" name="GenTone" value="balanced" checked="@(ToneOf("resume") == "balanced")" /> Balanced</label>
+                                            <label class="gen-check"><input type="radio" name="GenTone" value="confident" checked="@(ToneOf("resume") == "confident")" /> Confident</label>
+                                            <label class="gen-check"><input type="radio" name="GenTone" value="honest" checked="@(ToneOf("resume") == "honest")" /> Honest critique</label>
+                                        </div>
+                                    </fieldset>
+
+                                    <details class="gen-jd" open="@JdOpen("resume")">
+                                        <summary>Tailor to a job description (optional)</summary>
+                                        <p class="hint">Paste a job posting to aim the output at that role and add tips to become more competitive for it.</p>
+                                        <textarea class="input gen-jd-text" name="GenJob" rows="5" placeholder="Paste the job description here…" spellcheck="false">@JdOf("resume")</textarea>
+                                    </details>
+
+                                    <label class="gen-check"><input type="checkbox" name="GenAts" value="true" checked="@(Model.GenCategory == "resume" && Model.Options.AtsOptimize)" /> Optimize for ATS <span class="gen-note">— keyword-dense, screener-friendly bullets</span></label>
+
+                                    <label class="gen-check gen-stream"><input type="checkbox" name="GenStream" value="true" /> Stream it live</label>
+                                    <p class="stream-note"><strong>Leave off for clean, formatted results.</strong> Turn on to watch the text type out live — but it appears as raw, unformatted text (OpenAI only).</p>
+                                </div>
+                            </details>
+
+                            <div class="gen-actions">
+                                <button class="btn btn-primary" type="submit">@(resumeArtifacts.Count > 0 ? "Regenerate" : "Generate résumé material")</button>
+                                <span class="hint gen-note">Creates résumé bullets + a project summary by default. One API call — a few cents, a few seconds.</span>
+                            </div>
+                        </form>
+
+                        @if (resumeArtifacts.Count > 0)
+                        {
+                            <div class="gen-results">
+                                @foreach (var group in resumeArtifacts.GroupBy(a => a.ArtifactType))
+                                {
+                                    <partial name="_ResultGroup" model="group" />
+                                }
+                                <p class="hint">Click a section heading to collapse it. Use <strong>Edit</strong> to tweak wording, and an evidence tag to jump to its source in the Evidence tab.</p>
+                            </div>
+                        }
+                    }
+                </div>
+
+                @if (r.ResumeAngles.Count > 0)
+                {
+                    <details class="card rule-based" open="@(!Model.AiConfigured)">
+                        <summary class="rule-summary">
+                            <span class="rule-title">Rule-based résumé angles</span>
+                            <span class="rule-tag">no API key needed</span>
+                        </summary>
+                        <button class="copy-btn" type="button" data-copy-closest=".card">Copy</button>
+                        <p class="hint">Detected automatically (no AI), each backed by evidence in the repo.</p>
+                        <ul class="clean copyable">
+                            @foreach (var angle in r.ResumeAngles)
+                            {
+                                <li>
+                                    @angle.Text
+                                    @if (angle.SupportingEvidence.Count > 0)
+                                    {
+                                        <span class="evidence">Evidence: @string.Join(", ", angle.SupportingEvidence.Select(e => e.Label))</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </section>
+
+            <!-- INTERVIEW PREP -->
+            <section class="tabpanel" role="tabpanel" data-panel="interview" aria-labelledby="t-interview" tabindex="0">
+                <div class="card" id="generate-interview">
+                    <div class="card-head-row">
+                        <h2>Interview material</h2>
+                        <a class="btn" asp-page="/PrepPack" asp-route-owner="@r.Owner" asp-route-repo="@r.Name">Printable prep pack →</a>
+                    </div>
+                    <p class="hint">A STAR story you can tell about this project — grounded only in the repo, editable before you copy. Paste a job description to also get an honest gap analysis for that role.</p>
+
+                    @if (!string.IsNullOrEmpty(Model.GenerationError) && Model.GenCategory == "interview")
+                    {
+                        <div class="alert alert-danger">@Model.GenerationError</div>
+                    }
+
+                    @if (!Model.AiConfigured)
+                    {
+                        <div class="alert alert-info">
+                            <strong>One-time setup:</strong> AI writing needs your own OpenAI or Anthropic key — add it on the
+                            Settings page (stored encrypted, takes effect immediately). Everything else here is free.
+                        </div>
+                        <a class="btn btn-primary" asp-page="/Settings" asp-route-returnUrl="@(Request.Path + Request.QueryString)">Add an API key in Settings →</a>
+                    }
+                    else
+                    {
+                        <form method="post" asp-page-handler="Generate" data-loading="Generating…" class="gen-form">
+                            <input type="hidden" name="owner" value="@r.Owner" />
+                            <input type="hidden" name="repo" value="@r.Name" />
+                            <input type="hidden" name="GenCategory" value="interview" />
+                            <input type="hidden" name="GenTypes" value="InterviewStory" />
+
+                            <details class="gen-advanced" open="@AdvOpen("interview")">
+                                <summary>Customize <span class="gen-advanced-sub">— add likely questions, set tone, or tailor to a job</span></summary>
+                                <div class="gen-advanced-body">
+                                    <fieldset class="gen-group">
+                                        <legend>What to generate</legend>
+                                        <div class="gen-checks">
+                                            <label class="gen-check"><input type="checkbox" checked disabled /> Interview story (STAR)</label>
+                                            <label class="gen-check"><input type="checkbox" name="GenTypes" value="LikelyQuestions" checked="@Chk("interview", "LikelyQuestions", false)" /> Likely questions about this repo</label>
+                                        </div>
+                                    </fieldset>
+
+                                    <fieldset class="gen-group">
+                                        <legend>Tone</legend>
+                                        <div class="gen-checks">
+                                            <label class="gen-check"><input type="radio" name="GenTone" value="balanced" checked="@(ToneOf("interview") == "balanced")" /> Balanced</label>
+                                            <label class="gen-check"><input type="radio" name="GenTone" value="confident" checked="@(ToneOf("interview") == "confident")" /> Confident</label>
+                                            <label class="gen-check"><input type="radio" name="GenTone" value="honest" checked="@(ToneOf("interview") == "honest")" /> Honest critique</label>
+                                        </div>
+                                    </fieldset>
+
+                                    <details class="gen-jd" open="@JdOpen("interview")">
+                                        <summary>Tailor to a job description (optional)</summary>
+                                        <p class="hint">Paste a job posting to aim the story at that role and get a gap analysis for it.</p>
+                                        <textarea class="input gen-jd-text" name="GenJob" rows="5" placeholder="Paste the job description here…" spellcheck="false">@JdOf("interview")</textarea>
+                                    </details>
+
+                                    <label class="gen-check gen-stream"><input type="checkbox" name="GenStream" value="true" /> Stream it live</label>
+                                    <p class="stream-note"><strong>Leave off for clean, formatted results.</strong> Turn on to watch the text type out live — but it appears as raw, unformatted text (OpenAI only).</p>
+                                </div>
+                            </details>
+
+                            <div class="gen-actions">
+                                <button class="btn btn-primary" type="submit">@(interviewArtifacts.Count > 0 ? "Regenerate" : "Generate interview material")</button>
+                                <span class="hint gen-note">Creates a STAR interview story. One API call — a few cents, a few seconds.</span>
+                            </div>
+                        </form>
+
+                        @if (interviewArtifacts.Count > 0)
+                        {
+                            <div class="gen-results">
+                                @foreach (var group in interviewArtifacts.GroupBy(a => a.ArtifactType))
+                                {
+                                    <partial name="_ResultGroup" model="group" />
+                                }
+                                <p class="hint">Click a section heading to collapse it. Use <strong>Edit</strong> to tweak wording, and an evidence tag to jump to its source in the Evidence tab.</p>
+                            </div>
+                        }
+                    }
+                </div>
+
+                @if (r.InterviewTalkingPoints.Count > 0)
+                {
+                    <details class="card rule-based" open="@(!Model.AiConfigured)">
+                        <summary class="rule-summary">
+                            <span class="rule-title">Rule-based talking points</span>
+                            <span class="rule-tag">no API key needed</span>
+                        </summary>
+                        <button class="copy-btn" type="button" data-copy-closest=".card">Copy</button>
+                        <ul class="clean copyable">
+                            @foreach (var point in r.InterviewTalkingPoints)
+                            {
+                                <li>@point.Text</li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </section>
+
+            <!-- RAISE YOUR GRADE -->
+            @if (r.Maturity is not null && missing.Count > 0)
+            {
+                <section class="tabpanel" role="tabpanel" data-panel="grade" aria-labelledby="t-grade" tabindex="0">
+                    <div class="card coach">
+                        <h2>Raise your grade</h2>
+                        <p class="hint">
+                            @missing.Count of the @r.Maturity.Signals.Count checklist items above @(missing.Count == 1 ? "isn't" : "aren't")
+                            green yet — worth up to <strong>+@missingPotential points</strong> on your
+                            <strong>@r.Maturity.Grade (@r.Maturity.Score/100)</strong> score. Each one has a step-by-step how-to below.
+                        </p>
+                        <div class="howto-list">
+                            @foreach (var s in missing.OrderByDescending(x => HowTo(x.Label).Pts))
+                            {
+                                var ht = HowTo(s.Label);
+                                <details class="howto">
+                                    <summary>
+                                        <span class="howto-label">@s.Label</span>
+                                        <span class="howto-pts">+@ht.Pts pts</span>
+                                    </summary>
+                                    <div class="howto-body">
+                                        @if (!string.IsNullOrEmpty(ht.Why))
+                                        {
+                                            <p class="howto-why">@ht.Why</p>
+                                        }
+                                        @if (ht.Steps.Length > 0)
+                                        {
+                                            <ol class="howto-steps">
+                                                @foreach (var step in ht.Steps)
+                                                {
+                                                    <li>@step</li>
+                                                }
+                                            </ol>
+                                        }
+                                    </div>
+                                </details>
+                            }
+                        </div>
+                    </div>
+                </section>
+            }
+
+            <!-- EVIDENCE: the facts -->
+            <section class="tabpanel" role="tabpanel" data-panel="evidence" aria-labelledby="t-evidence" tabindex="0">
+                @if (!string.IsNullOrEmpty(pageMermaid))
+                {
+                    <div class="card">
+                        <h2>Architecture</h2>
+                        <p class="hint">A high-level map inferred from the folder structure, the imports in the key source files, and detected data stores.</p>
+                        <div class="mermaid-wrap">
+                            <pre class="mermaid">@pageMermaid</pre>
+                        </div>
+                    </div>
+                }
+
+                @if (r.KeyFiles.Count > 0)
+                {
+                    <div class="card">
+                        <h2>Key source files</h2>
+                        <p class="hint">The highest-signal files RepoSummary actually read to ground its analysis and diagram. Click any to view it on GitHub.</p>
+                        <div class="Box">
+                            @foreach (var kf in r.KeyFiles)
+                            {
+                                <div class="Box-row keyfile-row">
+                                    <svg class="keyfile-icon" height="16" viewBox="0 0 16 16" width="16" aria-hidden="true" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 10 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"></path></svg>
+                                    @if (!string.IsNullOrEmpty(kf.HtmlUrl))
+                                    {
+                                        <a href="@kf.HtmlUrl" target="_blank" rel="noopener" class="mono keyfile-path">@kf.Path</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="mono keyfile-path">@kf.Path</span>
+                                    }
+                                    <span class="keyfile-reason">@kf.Reason</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (r.Languages.Count > 0)
+                {
+                    <div class="card">
+                        <h2>Detected Technologies</h2>
+                        <div class="lang-bar">
+                            @for (var i = 0; i < r.Languages.Count; i++)
+                            {
+                                <span style="width:@(r.Languages[i].Percentage)%; background:@palette[i % palette.Length];"
+                                      title="@r.Languages[i].Name @r.Languages[i].Percentage%"></span>
+                            }
+                        </div>
+                        <div class="lang-legend">
+                            @for (var i = 0; i < r.Languages.Count; i++)
+                            {
+                                <span class="legend-item">
+                                    <span class="tech-icon" style="--tc:@palette[i % palette.Length];">@TechCode(r.Languages[i].Name)</span>
+                                    <span class="lang-name">@r.Languages[i].Name</span> <span class="muted">@r.Languages[i].Percentage%</span>
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (r.Packages.Count > 0)
+                {
+                    var depGroups = r.Packages.GroupBy(p => p.Source)
+                        .Select(g => new { Source = g.Key, Count = g.Count() })
+                        .OrderByDescending(x => x.Count).ToList();
+                    var depMax = depGroups.Count > 0 ? depGroups.Max(x => x.Count) : 0;
+
+                    <div class="card">
+                        <h2>Detected Dependencies</h2>
+                        <p class="hint">Parsed from manifest files (@string.Join(", ", r.Packages.Select(p => p.Source).Distinct())).</p>
+
+                        @if (depGroups.Count >= 2)
+                        {
+                            <div class="barchart" role="img" aria-label="Dependency count by manifest file">
+                                @foreach (var g in depGroups)
+                                {
+                                    <div class="barrow" title="@g.Count dependencies from @g.Source">
+                                        <span class="bar-label">@g.Source</span>
+                                        <span class="bar-track"><span class="bar-fill" style="width:@(depMax == 0 ? 0 : (int)Math.Round(g.Count * 100.0 / depMax))%;"></span></span>
+                                        <span class="bar-val">@g.Count</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <div class="chips">
+                            @foreach (var pkg in r.Packages.Take(40))
+                            {
+                                <span class="chip" title="from @pkg.Source">@pkg.Name@if (!string.IsNullOrEmpty(pkg.Version)){<span class="chip-ver">@pkg.Version</span>}</span>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (showSignals)
+                {
+                    <div class="card">
+                        <h2>Project Signals</h2>
+                        <dl class="signal-list">
+                            @if (r.ArchitecturePattern is not null)
+                            {
+                                <div><dt>Architecture</dt><dd>@r.ArchitecturePattern</dd></div>
+                            }
+                            @if (r.DatabaseTech is not null)
+                            {
+                                <div><dt>Database</dt><dd>@r.DatabaseTech</dd></div>
+                            }
+                            @if (r.ControllerCount > 0 || r.HasOpenApi)
+                            {
+                                <div>
+                                    <dt>API</dt>
+                                    <dd>
+                                        @if (r.ControllerCount > 0)
+                                        {
+                                            <text>@r.ControllerCount controller@(r.ControllerCount == 1 ? "" : "s")</text>
+                                        }
+                                        @if (r.ControllerCount > 0 && r.HasOpenApi){<text> · </text>}
+                                        @if (r.HasOpenApi){<text>OpenAPI / Swagger documented</text>}
+                                    </dd>
+                                </div>
+                            }
+                            @if (r.Workflows.Count > 0)
+                            {
+                                <div>
+                                    <dt>CI / CD</dt>
+                                    <dd>
+                                        @foreach (var w in r.Workflows)
+                                        {
+                                            <div><span class="mono">@w.Name</span>@if (w.Does.Count > 0){<text> — @string.Join(", ", w.Does)</text>}</div>
+                                        }
+                                    </dd>
+                                </div>
+                            }
+                            @if (r.SecurityTools.Count > 0)
+                            {
+                                <div><dt>Security</dt><dd>@string.Join(", ", r.SecurityTools)</dd></div>
+                            }
+                            @if (!string.IsNullOrEmpty(r.License))
+                            {
+                                <div><dt>License</dt><dd>@r.License</dd></div>
+                            }
+                            @if (r.ReleaseCount is > 0)
+                            {
+                                <div>
+                                    <dt>Releases</dt>
+                                    <dd>
+                                        @(r.ReleaseCount >= 10 ? "10+" : r.ReleaseCount.ToString())@if (!string.IsNullOrEmpty(r.LatestReleaseName)){<text> · latest: @r.LatestReleaseName</text>}
+                                    </dd>
+                                </div>
+                            }
+                            @foreach (var ci in r.CommitInsights)
+                            {
+                                <div><dt>Commits</dt><dd>@ci</dd></div>
+                            }
+                        </dl>
+                    </div>
+                }
+
+                @if (r.RecentCommits.Count > 0)
+                {
+                    var dated = r.RecentCommits.Where(c => c.Date is not null).OrderBy(c => c.Date).ToList();
+
+                    <div class="card">
+                        <h2>Recent Commits</h2>
+
+                        @if (dated.Count >= 2)
+                        {
+                            var min = dated.First().Date!.Value;
+                            var max = dated.Last().Date!.Value;
+                            var span = (max - min).TotalDays;
+                            var days = Math.Max(1, (int)Math.Ceiling(span));
+                            var inv = System.Globalization.CultureInfo.InvariantCulture;
+
+                            <div class="timeline">
+                                <div class="timeline-caption">@dated.Count commits over @days day@(days == 1 ? "" : "s") · @min.ToString("MMM d") – @max.ToString("MMM d, yyyy")</div>
+                                <svg class="timeline-svg" viewBox="0 0 1000 44" role="img" aria-label="Recent commit activity timeline">
+                                    <line x1="30" y1="22" x2="970" y2="22" class="tl-axis" />
+                                    @foreach (var c in dated)
+                                    {
+                                        var t = span <= 0 ? 0.5 : (c.Date!.Value - min).TotalDays / span;
+                                        var x = (30 + t * 940).ToString("F1", inv);
+                                        <circle cx="@x" cy="22" r="7" class="tl-dot"><title>@c.FirstLine — @c.Date!.Value.ToString("MMM d, yyyy")</title></circle>
+                                    }
+                                </svg>
+                            </div>
+                        }
+
+                        <div class="Box">
+                            <div class="Box-header">Latest @r.RecentCommits.Count commits</div>
+                            @foreach (var c in r.RecentCommits)
+                            {
+                                <div class="Box-row commit-row">
+                                    <span class="msg">@c.FirstLine</span>
+                                    <span class="sha">
+                                        @if (!string.IsNullOrEmpty(c.HtmlUrl))
+                                        { <a href="@c.HtmlUrl" target="_blank" rel="noopener">@c.ShortSha</a> }
+                                        else { @c.ShortSha }
+                                    </span>
+                                    <span class="date">@(c.Date?.ToString("MMM d") ?? "")</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+
+            <!-- ASK THIS REPO -->
+            <section class="tabpanel" role="tabpanel" data-panel="ask" aria-labelledby="t-ask" tabindex="0">
+                <div class="card" id="ask-repo">
+                    <h2>Ask this repo</h2>
+                    <p class="hint">Ask how this project works. Answers are grounded in the evidence and the key source files RepoSummary read — it says when the evidence doesn't cover something, and never invents behaviour.</p>
+
+                    @if (!Model.AiConfigured)
+                    {
+                        <div class="alert alert-info">
+                            <strong>One-time setup:</strong> Q&amp;A needs your own OpenAI or Anthropic key — add it on the
+                            Settings page (stored encrypted, takes effect immediately).
+                        </div>
+                        <a class="btn btn-primary" asp-page="/Settings" asp-route-returnUrl="@(Request.Path + Request.QueryString)">Add an API key in Settings →</a>
+                    }
+                    else
+                    {
+                        <form class="ask-form" data-ask-form>
+                            <input type="hidden" name="owner" value="@r.Owner" />
+                            <input type="hidden" name="repo" value="@r.Name" />
+                            <div class="ask-row">
+                                <input class="input" type="text" name="question" autocomplete="off" spellcheck="false"
+                                       placeholder="e.g. How does authentication work? What does the entrypoint do?" data-ask-input />
+                                <button class="btn btn-primary" type="submit">Ask</button>
+                            </div>
+                        </form>
+                        <div class="ask-examples">
+                            <span class="chips-label">Try:</span>
+                            <button type="button" class="chip ask-example">What's the overall architecture?</button>
+                            <button type="button" class="chip ask-example">How is data stored?</button>
+                            <button type="button" class="chip ask-example">What would I highlight in an interview?</button>
+                        </div>
+                        <div class="ask-answer" data-ask-answer hidden></div>
+                    }
+                </div>
+            </section>
+
+            <!-- FILES -->
+            @if (r.TopLevelItems.Count > 0)
+            {
+                <section class="tabpanel" role="tabpanel" data-panel="files" aria-labelledby="t-files" tabindex="0">
+                    <div class="card">
+                        @if (r.AllPaths.Count > 0)
+                        {
+                            var treeLines = RepoSummary.Services.FileTreeRenderer.Build(r.AllPaths, 400);
+                            var (explorerRoot, explorerTruncated) =
+                                RepoSummary.Services.FileTreeRenderer.BuildTree(r.AllPaths, r.HtmlUrl, r.DefaultBranch, 2000);
+                            <div class="file-tabs">
+                                <input class="tab-radio" type="radio" name="fstab" id="fs-top" checked />
+                                <input class="tab-radio" type="radio" name="fstab" id="fs-tree" />
+                                <div class="tab-labels">
+                                    <label for="fs-top">Browse</label>
+                                    <label for="fs-tree">Tree</label>
+                                </div>
+                                <div class="tab-panels">
+                                    <div class="tab-panel panel-top">
+                                        <div class="Box">
+                                            <div class="Box-header">Browse the default branch — click a folder to expand it</div>
+                                            <div class="explorer-search-wrap">
+                                                <input type="text" class="explorer-search input" placeholder="Filter files…"
+                                                       aria-label="Filter files" spellcheck="false" data-for="#repo-explorer" />
+                                            </div>
+                                            <ul class="explorer" id="repo-explorer" data-explorer>
+                                                @foreach (var child in explorerRoot.Children)
+                                                {
+                                                    <partial name="_ExplorerNode" model="child" />
+                                                }
+                                            </ul>
+                                            @if (explorerTruncated)
+                                            {
+                                                <div class="Box-row muted">Large repo — some deeply nested entries are hidden.</div>
+                                            }
+                                        </div>
+                                    </div>
+                                    <div class="tab-panel panel-tree">
+                                        <div class="Box">
+                                            <div class="Box-header">
+                                                Full tree@(r.TreeTruncated ? " (truncated by GitHub for very large repos)" : "")
+                                            </div>
+                                            <div class="tree">
+                                                @foreach (var line in treeLines)
+                                                {
+                                                    <div class="tree-line"><span class="tree-prefix">@line.Prefix</span><span class="@(line.IsDirectory ? "tree-dir" : "tree-file")">@line.Name@(line.IsDirectory ? "/" : "")</span></div>
+                                                }
+                                            </div>
+                                            @if (treeLines.Count >= 400)
+                                            {
+                                                <div class="Box-row muted">Showing the first 400 entries.</div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="Box">
+                                <div class="Box-header">Top level of the default branch</div>
+                                @foreach (var item in r.TopLevelItems)
+                                {
+                                    <partial name="_FileRow" model="item" />
+                                }
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+
+            <!-- README -->
+            @if (r.HasReadme)
+            {
+                <section class="tabpanel" role="tabpanel" data-panel="readme" aria-labelledby="t-readme" tabindex="0">
+                    <div class="card">
+                        <div class="readme markdown-body">
+                            @RepoSummary.Services.ReadmeRenderer.ToHtml(r.ReadmeContent!, r.Owner, r.Name, r.DefaultBranch)
+                        </div>
+                    </div>
+                </section>
+            }
+        </div>
+    </div>
+}
+
+@section Scripts {
+    @* Mermaid is ~3MB, so only load it when this repo actually has a diagram to render. *@
+    @if (!string.IsNullOrEmpty(pageMermaid))
+    {
+        <script src="~/lib/mermaid.min.js" asp-append-version="true" defer></script>
+    }
+}

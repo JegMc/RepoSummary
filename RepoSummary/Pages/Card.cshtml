@@ -1,0 +1,165 @@
+@page
+@model CardModel
+@{
+    ViewData["Title"] = Model.Result is not null ? $"{Model.Result.FullName} — Health card" : "Health card";
+    string[] palette = { "#3178c6", "#f1e05a", "#e34c26", "#563d7c", "#89e051", "#dea584", "#178600", "#858585" };
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage) || Model.Result is null)
+{
+    <a class="back-link no-print" asp-page="/Index">
+        <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"></path></svg>
+        Analyze a repository
+    </a>
+    <div class="alert alert-danger">@(Model.ErrorMessage ?? "No analysis to show.")</div>
+}
+else
+{
+    var r = Model.Result;
+    var m = r.Maturity;
+
+    // A compact "at a glance" line of the strongest facts, if present.
+    var facts = new List<string>();
+    if (!string.IsNullOrEmpty(r.ArchitecturePattern)) facts.Add(r.ArchitecturePattern!);
+    if (!string.IsNullOrEmpty(r.DatabaseTech)) facts.Add(r.DatabaseTech!);
+    if (r.ControllerCount > 0) facts.Add($"{r.ControllerCount} API controller{(r.ControllerCount == 1 ? "" : "s")}");
+    if (r.HasOpenApi) facts.Add("OpenAPI");
+    if (r.Workflows.Count > 0) facts.Add("CI/CD");
+    if (r.SecurityTools.Count > 0) facts.Add("Security tooling");
+    if (r.ReleaseCount is > 0) facts.Add($"{(r.ReleaseCount >= 10 ? "10+" : r.ReleaseCount)} release{(r.ReleaseCount == 1 ? "" : "s")}");
+
+    <div class="report-toolbar no-print">
+        <a class="back-link" asp-page="/Analysis" asp-route-owner="@r.Owner" asp-route-repo="@r.Name" asp-route-saved="true">
+            <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"></path></svg>
+            Back to analysis
+        </a>
+        <div class="report-actions">
+            <button class="btn" type="button" data-copy="@Model.ShareUrl">Copy link</button>
+            <button class="btn btn-primary" type="button" data-print>Save as PDF / Print</button>
+        </div>
+    </div>
+
+    <article class="sheet">
+        <div class="rc-head">
+            @if (m is not null)
+            {
+                <div class="rc-grade grade-@m.Grade.ToLowerInvariant()">
+                    <span class="rc-grade-letter">@m.Grade</span>
+                    <span class="rc-grade-score">@m.Score<span class="rc-grade-max">/100</span></span>
+                </div>
+            }
+            <div class="rc-titlewrap">
+                <div class="sheet-kicker">Repo health report card</div>
+                <h1 class="sheet-title">
+                    @if (!string.IsNullOrEmpty(r.HtmlUrl))
+                    {
+                        <a href="@r.HtmlUrl" target="_blank" rel="noopener">@r.FullName</a>
+                    }
+                    else
+                    {
+                        <text>@r.FullName</text>
+                    }
+                </h1>
+                @if (!string.IsNullOrWhiteSpace(r.Description))
+                {
+                    <p class="sheet-desc">@r.Description</p>
+                }
+            </div>
+        </div>
+
+        <div class="rc-stats">
+            <div class="rc-stat"><span class="rc-stat-num">@r.Stars.ToString("N0")</span><span class="rc-stat-lbl">Stars</span></div>
+            <div class="rc-stat"><span class="rc-stat-num">@r.Forks.ToString("N0")</span><span class="rc-stat-lbl">Forks</span></div>
+            <div class="rc-stat"><span class="rc-stat-num">@r.OpenIssues.ToString("N0")</span><span class="rc-stat-lbl">Open issues</span></div>
+            @if (!string.IsNullOrEmpty(r.PrimaryLanguage))
+            {
+                <div class="rc-stat"><span class="rc-stat-num">@r.PrimaryLanguage</span><span class="rc-stat-lbl">Primary language</span></div>
+            }
+            @if (!string.IsNullOrEmpty(r.License))
+            {
+                <div class="rc-stat"><span class="rc-stat-num">@r.License</span><span class="rc-stat-lbl">License</span></div>
+            }
+            @if (r.CreatedAt is not null)
+            {
+                <div class="rc-stat"><span class="rc-stat-num">@r.CreatedAt.Value.ToString("MMM yyyy")</span><span class="rc-stat-lbl">Created</span></div>
+            }
+        </div>
+
+        @if (r.Languages.Count > 0)
+        {
+            <div class="sheet-section">
+                <h2 class="sheet-h">Languages</h2>
+                <div class="lang-bar">
+                    @for (var i = 0; i < r.Languages.Count; i++)
+                    {
+                        <span style="width:@(r.Languages[i].Percentage)%; background:@palette[i % palette.Length];"
+                              title="@r.Languages[i].Name @r.Languages[i].Percentage%"></span>
+                    }
+                </div>
+                <div class="rc-langlegend">
+                    @for (var i = 0; i < Math.Min(r.Languages.Count, 6); i++)
+                    {
+                        <span class="rc-legend-item">
+                            <span class="rc-dot" style="background:@palette[i % palette.Length];"></span>
+                            @r.Languages[i].Name <span class="muted">@r.Languages[i].Percentage%</span>
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (m is not null && m.Signals.Count > 0)
+        {
+            <div class="sheet-section">
+                <h2 class="sheet-h">Health signals</h2>
+                <div class="rc-signals">
+                    @foreach (var s in m.Signals)
+                    {
+                        <span class="rc-signal @(s.Present ? "on" : "off")">
+                            <span class="rc-sig-ic">@(s.Present ? "✓" : "○")</span>@s.Label
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (facts.Count > 0)
+        {
+            <div class="sheet-section">
+                <h2 class="sheet-h">At a glance</h2>
+                <div class="rc-facts">
+                    @foreach (var f in facts)
+                    {
+                        <span class="chip">@f</span>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="sheet-foot">
+            <span class="sheet-brand">
+                <svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true">
+                    <rect x="1" y="1" width="30" height="30" rx="8" fill="#2f81f7" />
+                    <rect x="15" y="6" width="11" height="20" rx="2" fill="#ffffff" />
+                    <rect x="17.3" y="10" width="6" height="1.5" rx=".75" fill="#8592a3" />
+                    <rect x="17.3" y="13" width="6" height="1.5" rx=".75" fill="#8592a3" />
+                    <rect x="17.3" y="16" width="3.8" height="1.5" rx=".75" fill="#8592a3" />
+                    <path d="M8 9.5 L8 22.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" />
+                    <path d="M8 16 C 8 13, 10 12, 12.5 12" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" />
+                    <circle cx="8" cy="7.5" r="2.3" fill="#ffffff" />
+                    <circle cx="8" cy="24.5" r="2.3" fill="#ffffff" />
+                    <circle cx="12.5" cy="12" r="2.3" fill="#ffffff" />
+                </svg>
+                Generated by RepoSummary
+            </span>
+            @if (Model.SavedAt is not null)
+            {
+                <span class="muted">Analyzed @Model.SavedAt.Value.ToLocalTime().ToString("MMM d, yyyy")</span>
+            }
+        </div>
+    </article>
+
+    <p class="card-cta no-print">
+        Want one for your own project? <a asp-page="/Index">Analyze a GitHub repository →</a>
+    </p>
+}

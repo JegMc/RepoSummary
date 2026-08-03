@@ -1,0 +1,177 @@
+@page
+@model SettingsModel
+@{
+    ViewData["Title"] = "Settings";
+}
+
+@if (Model.HasReturn)
+{
+    <a class="back-link" href="@Model.ReturnUrl">
+        <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"></path></svg>
+        Return to where you left off
+    </a>
+}
+
+<h1>Settings</h1>
+<p class="lead">
+    Everything below is optional, stored <strong>encrypted on this computer only</strong>, and
+    <strong>never saved to the repository</strong>. Enter each once — it survives restarts and code changes.
+</p>
+
+@if (!string.IsNullOrEmpty(Model.StatusMessage))
+{
+    <div class="alert alert-info">@Model.StatusMessage</div>
+}
+
+<div class="card">
+    <h2>AI generation</h2>
+    <p class="hint">
+        AI writing (résumé bullets, interview story, project summary) works with <strong>either</strong>
+        an OpenAI (ChatGPT) key <strong>or</strong> an Anthropic (Claude) key. Add whichever you have.
+        You pay the provider directly for your own usage — typically a few cents per generation.
+    </p>
+    @if (Model.AiConfigured)
+    {
+        <p class="token-status"><span class="ok-dot"></span> AI generation is enabled — currently using <strong>@Model.ActiveProviderName</strong>.</p>
+    }
+    else
+    {
+        <p class="token-status muted"><span class="off-dot"></span> No AI key set — generation is disabled.</p>
+    }
+
+    @if (Model.BothKeysSet)
+    {
+        <form method="post" asp-page-handler="SavePreference" asp-route-returnUrl="@Model.ReturnUrl" class="mt provider-pick">
+            <span class="pick-label">Both keys are set. Prefer:</span>
+            <label><input type="radio" name="Provider" value="openai" checked="@(Model.PreferredProvider == "openai")" /> OpenAI (ChatGPT)</label>
+            <label><input type="radio" name="Provider" value="anthropic" checked="@(Model.PreferredProvider == "anthropic")" /> Anthropic (Claude)</label>
+            <button class="btn" type="submit">Save preference</button>
+        </form>
+    }
+</div>
+
+<!-- OpenAI key -->
+<div class="card">
+    <h2>OpenAI (ChatGPT) API key</h2>
+    @if (Model.HasOpenAi)
+    {
+        <p class="token-status"><span class="ok-dot"></span> A key is set (<code>@Model.MaskedOpenAi</code>).</p>
+    }
+    else
+    {
+        <p class="token-status muted"><span class="off-dot"></span> No OpenAI key set.</p>
+    }
+    <form method="post" asp-page-handler="SaveOpenAi" asp-route-returnUrl="@Model.ReturnUrl" data-loading="Saving…" class="token-form">
+        <div class="form-row">
+            <input class="input" type="password" name="OpenAiKey" placeholder="sk-… (paste your OpenAI key)"
+                   autocomplete="off" spellcheck="false" aria-label="OpenAI API key" />
+            <button class="btn btn-primary" type="submit">Save key</button>
+        </div>
+    </form>
+    @if (Model.HasOpenAi)
+    {
+        <form method="post" asp-page-handler="ClearOpenAi" asp-route-returnUrl="@Model.ReturnUrl" class="mt">
+            <button class="btn" type="submit">Remove key</button>
+        </form>
+    }
+    <details class="how">
+        <summary>How do I get an OpenAI API key?</summary>
+        <ol class="clean">
+            <li>Sign in at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com → API keys</a>.</li>
+            <li>Create a secret key (it starts with <code>sk-</code>) and add a little credit under Billing.</li>
+            <li>Paste it above. It's stored encrypted here and never leaves your machine.</li>
+        </ol>
+    </details>
+</div>
+
+<!-- Anthropic key -->
+<div class="card">
+    <h2>Anthropic (Claude) API key</h2>
+    @if (Model.HasAnthropic)
+    {
+        <p class="token-status"><span class="ok-dot"></span> A key is set (<code>@Model.MaskedAnthropic</code>).</p>
+    }
+    else
+    {
+        <p class="token-status muted"><span class="off-dot"></span> No Anthropic key set.</p>
+    }
+    <form method="post" asp-page-handler="SaveAnthropic" asp-route-returnUrl="@Model.ReturnUrl" data-loading="Saving…" class="token-form">
+        <div class="form-row">
+            <input class="input" type="password" name="AnthropicKey" placeholder="sk-ant-… (paste your Anthropic key)"
+                   autocomplete="off" spellcheck="false" aria-label="Anthropic API key" />
+            <button class="btn btn-primary" type="submit">Save key</button>
+        </div>
+    </form>
+    @if (Model.HasAnthropic)
+    {
+        <form method="post" asp-page-handler="ClearAnthropic" asp-route-returnUrl="@Model.ReturnUrl" class="mt">
+            <button class="btn" type="submit">Remove key</button>
+        </form>
+    }
+    <details class="how">
+        <summary>How do I get an Anthropic API key?</summary>
+        <ol class="clean">
+            <li>Sign in at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com → API keys</a>.</li>
+            <li>Create a key (it starts with <code>sk-ant-</code>) and add a little credit to your account.</li>
+            <li>Paste it above. It's stored encrypted here and never leaves your machine.</li>
+        </ol>
+    </details>
+</div>
+
+<!-- GitHub token -->
+<div class="card">
+    <h2>GitHub access token <span class="tag-optional">for higher limits</span></h2>
+    <p class="hint">
+        Without one, GitHub limits this app to <strong>60 requests/hour</strong> — and a single analysis
+        uses several. A token raises that to <strong>5,000/hour</strong>. Recommended, but not required.
+    </p>
+    @if (Model.HasToken)
+    {
+        <p class="token-status"><span class="ok-dot"></span> A token is set (<code>@Model.MaskedToken</code>).</p>
+    }
+    else
+    {
+        <p class="token-status muted"><span class="off-dot"></span> No token set — using the anonymous 60/hour limit.</p>
+    }
+    <form method="post" asp-page-handler="SaveGitHub" asp-route-returnUrl="@Model.ReturnUrl" data-loading="Saving…" class="token-form">
+        <div class="form-row">
+            <input class="input" type="password" name="GitHubToken" placeholder="ghp_… / github_pat_… (paste your token)"
+                   autocomplete="off" spellcheck="false" aria-label="GitHub token" />
+            <button class="btn btn-primary" type="submit">Save token</button>
+        </div>
+    </form>
+    @if (Model.HasToken)
+    {
+        <form method="post" asp-page-handler="ClearGitHub" asp-route-returnUrl="@Model.ReturnUrl" class="mt">
+            <button class="btn" type="submit">Remove token</button>
+        </form>
+    }
+    <details class="how">
+        <summary>How do I get a GitHub token?</summary>
+        <ol class="clean">
+            <li>Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">GitHub → Developer settings → Personal access tokens</a>.</li>
+            <li>Create a <strong>fine-grained token</strong>. For public repos you don't need to grant any permissions.</li>
+            <li>Copy it and paste it above.</li>
+        </ol>
+    </details>
+</div>
+
+<!-- Live rate limit -->
+<div class="card">
+    <h2>GitHub rate limit</h2>
+    @if (Model.RateLimit.Known)
+    {
+        <div class="repo-meta">
+            <span class="counter"><strong>@Model.RateLimit.Remaining</strong> / @Model.RateLimit.Limit requests left this hour</span>
+            @if (Model.RateLimit.ResetsAt is not null)
+            {
+                <span class="meta-note">resets @Model.RateLimit.ResetsAt.Value.ToLocalTime().ToString("h:mm tt")</span>
+            }
+            <span class="meta-note">@(Model.RateLimit.Authenticated ? "authenticated (token in use)" : "anonymous")</span>
+        </div>
+    }
+    else
+    {
+        <p class="hint">Analyze a repository and your current limit will show up here.</p>
+    }
+</div>

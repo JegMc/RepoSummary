@@ -1,0 +1,84 @@
+@inject RepoSummary.Services.GitHubRateLimitStore RateLimit
+@{
+    // Highlight the nav item for the current section. Result pages that belong to the
+    // analyze flow (Analysis, Card, PrepPack) light up "Analyze" so the user always
+    // knows where they are.
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
+    string NavActive(params string[] pages) =>
+        pages.Any(p => string.Equals(currentPage, p, StringComparison.OrdinalIgnoreCase)) ? "active" : "";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - RepoSummary</title>
+    <link rel="icon" href="~/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a class="brand" asp-page="/Index" title="RepoSummary home">
+                <span class="brand-logo" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" width="28" height="28">
+                        <defs>
+                            <linearGradient id="bl" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0" stop-color="#2f81f7" />
+                                <stop offset="1" stop-color="#2ea043" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="1" y="1" width="30" height="30" rx="8" fill="url(#bl)" />
+                        <rect x="15" y="6" width="11" height="20" rx="2" fill="#ffffff" />
+                        <rect x="17.3" y="10" width="6" height="1.5" rx=".75" fill="#8592a3" />
+                        <rect x="17.3" y="13" width="6" height="1.5" rx=".75" fill="#8592a3" />
+                        <rect x="17.3" y="16" width="3.8" height="1.5" rx=".75" fill="#8592a3" />
+                        <path d="M8 9.5 L8 22.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" />
+                        <path d="M8 16 C 8 13, 10 12, 12.5 12" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" />
+                        <circle cx="8" cy="7.5" r="2.3" fill="#ffffff" />
+                        <circle cx="8" cy="24.5" r="2.3" fill="#ffffff" />
+                        <circle cx="12.5" cy="12" r="2.3" fill="#ffffff" />
+                    </svg>
+                </span>
+                <span>RepoSummary</span>
+            </a>
+
+            <form class="header-search" method="post" asp-page="/Index">
+                <input type="text" name="RepoInput" placeholder="Search or paste a repo…"
+                       aria-label="Analyze a GitHub repository" spellcheck="false" autocomplete="off" data-repo-input />
+            </form>
+
+            <nav class="nav">
+                <a class="@NavActive("/Index", "/Analysis", "/Card", "/PrepPack")" asp-page="/Index">Analyze</a>
+                <a class="@NavActive("/History")" asp-page="/History">History</a>
+                <a class="@NavActive("/Compare")" asp-page="/Compare">Compare</a>
+                <a class="@NavActive("/Portfolio")" asp-page="/Portfolio">Portfolio</a>
+                <a class="@NavActive("/About")" asp-page="/About">About</a>
+                <a class="@NavActive("/Settings")" asp-page="/Settings">Settings</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        @RenderBody()
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <span class="footer-text">RepoSummary — evidence-backed project summaries. Public GitHub repos only.</span>
+            @if (RateLimit.Known)
+            {
+                <a class="ratechip" asp-page="/Settings" title="GitHub API requests remaining this hour">
+                    <span class="ratedot @(RateLimit.Remaining <= 5 ? "low" : "")"></span>
+                    GitHub API: @RateLimit.Remaining / @RateLimit.Limit left@(RateLimit.Authenticated ? "" : " (anonymous)")
+                </a>
+            }
+        </div>
+    </footer>
+
+    <div class="toast" id="app-toast" role="status" aria-live="polite"></div>
+    @* Page-specific scripts (e.g. Mermaid) load before site.js so its init can use them. *@
+    @await RenderSectionAsync("Scripts", required: false)
+    <script src="~/js/site.js" asp-append-version="true" defer></script>
+</body>
+</html>

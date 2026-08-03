@@ -1,0 +1,92 @@
+@page
+@model HistoryModel
+@{
+    ViewData["Title"] = "History";
+}
+
+<h1>History &amp; library</h1>
+<p class="lead">Everything you've analyzed, the skills those repos add up to, and the interview stories you've generated — saved locally on this machine.</p>
+
+@if (!string.IsNullOrEmpty(Model.StatusMessage))
+{
+    <div class="alert alert-info">@Model.StatusMessage</div>
+}
+
+@if (Model.Analyses.Count == 0)
+{
+    <div class="card">
+        <p class="hint">Nothing saved yet. <a asp-page="/Index">Analyze a repository</a> and it'll show up here.</p>
+    </div>
+}
+else
+{
+    <!-- Recent analyses -->
+    <div class="card">
+        <h2>Analyzed repositories <span class="muted">(@Model.Analyses.Count)</span></h2>
+        <div class="Box">
+            @foreach (var a in Model.Analyses)
+            {
+                <div class="Box-row history-row">
+                    <a class="history-name" asp-page="/Analysis" asp-route-owner="@a.Owner" asp-route-repo="@a.Name" asp-route-saved="true">@a.FullName</a>
+                    @if (!string.IsNullOrEmpty(a.PrimaryLanguage))
+                    {
+                        <span class="muted history-lang">@a.PrimaryLanguage</span>
+                    }
+                    @if (!string.IsNullOrEmpty(a.MaturityGrade))
+                    {
+                        <span class="recent-grade grade-@a.MaturityGrade.ToLowerInvariant()">@a.MaturityGrade</span>
+                    }
+                    <span class="history-date muted">@a.AnalyzedAt.ToLocalTime().ToString("MMM d, yyyy")</span>
+                    <span class="history-actions">
+                        <a asp-page="/Analysis" asp-route-owner="@a.Owner" asp-route-repo="@a.Name" asp-route-saved="true">Open</a>
+                        <a asp-page="/Card" asp-route-owner="@a.Owner" asp-route-repo="@a.Name">Card</a>
+                    </span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Skill inventory -->
+    @if (Model.Skills.Count > 0)
+    {
+        <div class="card">
+            <h2>Your skill inventory</h2>
+            <p class="hint">Languages and dependencies across your analyzed repos — the number shows how many repos use each.</p>
+            <div class="chips">
+                @foreach (var s in Model.Skills)
+                {
+                    <span class="chip @(s.Kind == "Language" ? "chip-lang" : "")" title="@s.Kind · in @s.Repos repo@(s.Repos == 1 ? "" : "s")">
+                        @s.Name<span class="chip-ver">@s.Repos</span>
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- STAR story bank -->
+    <div class="card">
+        <h2>Saved interview stories <span class="muted">(@Model.Stories.Count)</span></h2>
+        @if (Model.Stories.Count == 0)
+        {
+            <p class="hint">Generate career material for a repo and its STAR interview story is automatically kept here.</p>
+        }
+        else
+        {
+            @foreach (var story in Model.Stories)
+            {
+                <div class="artifact">
+                    <form method="post" asp-page-handler="DeleteStory" class="story-del">
+                        <input type="hidden" name="id" value="@story.Id" />
+                        <button class="remove-btn" type="submit" title="Remove from bank">Remove</button>
+                    </form>
+                    <div class="artifact-title">@story.Title <span class="muted story-repo">— @story.RepoFullName</span></div>
+                    <div class="artifact-content copyable">@story.Content</div>
+                    @if (!string.IsNullOrEmpty(story.EvidenceCsv))
+                    {
+                        <div class="chips"><span class="chips-label">Evidence:</span><span class="chip">@story.EvidenceCsv</span></div>
+                    }
+                </div>
+            }
+        }
+    </div>
+}

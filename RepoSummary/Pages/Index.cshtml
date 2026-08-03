@@ -1,0 +1,111 @@
+@page
+@model IndexModel
+@inject RepoSummary.Services.GitHubTokenStore GitHubToken
+@inject RepoSummary.Services.OpenAiKeyStore OpenAiKey
+@inject RepoSummary.Services.AnthropicKeyStore AnthropicKey
+@{
+    ViewData["Title"] = "Analyze a repository";
+    var hasAi = OpenAiKey.HasValue || AnthropicKey.HasValue;
+    // Everything optional is configured — the setup panel is just noise, so collapse it.
+    var allSet = GitHubToken.HasValue && hasAi;
+}
+
+<div class="home">
+    <h1>Analyze a GitHub repository</h1>
+    <p class="lead">
+        Paste a public GitHub repository and RepoSummary extracts the real project evidence —
+        technologies, commits, structure, README — then suggests résumé angles and interview
+        talking points backed by what's actually in the repo.
+    </p>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger">@Model.ErrorMessage</div>
+    }
+
+    <form class="analyze-form" method="post" data-loading="Analyzing…">
+        <div class="form-row">
+            <input class="input" type="text" name="RepoInput" value="@Model.RepoInput"
+                   placeholder="e.g. dotnet/aspnetcore" autocomplete="off" spellcheck="false" autofocus data-repo-input />
+            <button class="btn btn-primary" type="submit">Analyze</button>
+        </div>
+        <div class="hint">
+            Try
+            <span class="example-list">
+                <code>owner/repo</code>
+                <code>github.com/owner/repo</code>
+                <code>https://github.com/owner/repo</code>
+            </span>
+            · public repos only, no sign-in.
+        </div>
+    </form>
+
+    <!-- Setup status: what works now vs. what two optional keys unlock.
+         Collapsed once everything's configured — it's only actionable when something's missing. -->
+    <details class="setup" open="@(!allSet)">
+        <summary class="setup-summary">
+            <span class="setup-title">Setup</span>
+            @if (allSet)
+            {
+                <span class="setup-ok">✓ All set</span>
+                <span class="setup-sub">GitHub token and an AI key are configured.</span>
+            }
+            else
+            {
+                <span class="setup-sub">You can analyze any public repo right now — both keys below are optional.</span>
+            }
+        </summary>
+
+        <div class="setup-row">
+            <span class="setup-status @(GitHubToken.HasValue ? "on" : "off")">
+                @(GitHubToken.HasValue ? "Ready" : "Not set")
+            </span>
+            <div class="setup-body">
+                <div class="setup-name">GitHub token <span class="muted">— optional, recommended</span></div>
+                <div class="setup-desc">
+                    Raises the GitHub limit from <strong>60 → 5,000 requests/hour</strong>. Only matters if you
+                    analyze many repos in an hour. @if (!GitHubToken.HasValue) { <text>Analysis still works without it.</text> }
+                </div>
+            </div>
+        </div>
+
+        <div class="setup-row">
+            <span class="setup-status @(OpenAiKey.HasValue || AnthropicKey.HasValue ? "on" : "off")">
+                @(OpenAiKey.HasValue || AnthropicKey.HasValue ? "Ready" : "Not set")
+            </span>
+            <div class="setup-body">
+                <div class="setup-name">AI key <span class="muted">— optional; OpenAI (ChatGPT) or Anthropic (Claude)</span></div>
+                <div class="setup-desc">
+                    Add <strong>either</strong> an OpenAI or an Anthropic key to unlock the AI-generated
+                    <strong>résumé bullets, interview story, and project summary</strong>. Without one you
+                    still get all the evidence, detected tech, and rule-based résumé angles.
+                </div>
+            </div>
+        </div>
+
+        <a class="setup-link" asp-page="/Settings">Manage keys in Settings →</a>
+    </details>
+
+    @if (Model.Recent.Count > 0)
+    {
+        <div class="recent">
+            <div class="recent-head">
+                <span class="recent-title">Recently analyzed</span>
+                <a class="recent-all" asp-page="/History">View all →</a>
+            </div>
+            <div class="recent-list">
+                @foreach (var a in Model.Recent)
+                {
+                    <a class="recent-item" asp-page="/Analysis" asp-route-owner="@a.Owner" asp-route-repo="@a.Name" asp-route-saved="true">
+                        <span class="recent-name">@a.FullName</span>
+                        @if (!string.IsNullOrEmpty(a.MaturityGrade))
+                        {
+                            <span class="recent-grade grade-@a.MaturityGrade.ToLowerInvariant()">@a.MaturityGrade</span>
+                        }
+                    </a>
+                }
+            </div>
+        </div>
+    }
+</div>
+

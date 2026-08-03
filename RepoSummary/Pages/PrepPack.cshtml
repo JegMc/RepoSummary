@@ -1,0 +1,116 @@
+@page
+@model PrepPackModel
+@{
+    ViewData["Title"] = Model.Result is not null ? $"{Model.Result.FullName} — Interview prep pack" : "Interview prep pack";
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage) || Model.Result is null)
+{
+    <a class="back-link no-print" asp-page="/Index">
+        <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"></path></svg>
+        Analyze a repository
+    </a>
+    <div class="alert alert-danger">@(Model.ErrorMessage ?? "No analysis to show.")</div>
+}
+else
+{
+    var r = Model.Result;
+
+    var facts = new List<(string, string)>();
+    if (r.Languages.Count > 0) facts.Add(("Languages", string.Join(", ", r.Languages.Take(5).Select(x => $"{x.Name} {x.Percentage}%"))));
+    if (!string.IsNullOrEmpty(r.ArchitecturePattern)) facts.Add(("Architecture", r.ArchitecturePattern!));
+    if (!string.IsNullOrEmpty(r.DatabaseTech)) facts.Add(("Database", r.DatabaseTech!));
+    if (r.ControllerCount > 0 || r.HasOpenApi) facts.Add(("API", $"{(r.ControllerCount > 0 ? $"{r.ControllerCount} controller{(r.ControllerCount == 1 ? "" : "s")}" : "")}{(r.ControllerCount > 0 && r.HasOpenApi ? " · " : "")}{(r.HasOpenApi ? "OpenAPI" : "")}"));
+    if (r.Workflows.Count > 0) facts.Add(("CI / CD", string.Join(", ", r.Workflows.SelectMany(w => w.Does).Distinct())));
+    if (r.SecurityTools.Count > 0) facts.Add(("Security", string.Join(", ", r.SecurityTools)));
+    if (r.Packages.Count > 0) facts.Add(("Key dependencies", string.Join(", ", r.Packages.Take(8).Select(p => p.Name))));
+
+    <div class="report-toolbar no-print">
+        <a class="back-link" asp-page="/Analysis" asp-route-owner="@r.Owner" asp-route-repo="@r.Name" asp-route-saved="true">
+            <svg height="16" viewBox="0 0 16 16" width="16" aria-hidden="true" fill="currentColor"><path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"></path></svg>
+            Back to analysis
+        </a>
+        <button class="btn btn-primary" type="button" data-print>Save as PDF / Print</button>
+    </div>
+
+    <article class="sheet">
+        <header class="prep-head">
+            <div class="sheet-kicker">Interview prep pack</div>
+            <h1 class="sheet-title">@r.FullName</h1>
+            @if (!string.IsNullOrWhiteSpace(r.Description))
+            {
+                <p class="sheet-desc">@r.Description</p>
+            }
+        </header>
+
+        @if (facts.Count > 0)
+        {
+            <section class="sheet-section">
+                <h2 class="sheet-h">Know the project</h2>
+                <dl class="prep-facts">
+                    @foreach (var (label, val) in facts)
+                    {
+                        <div><dt>@label</dt><dd>@val</dd></div>
+                    }
+                </dl>
+            </section>
+        }
+
+        @if (r.InterviewTalkingPoints.Count > 0)
+        {
+            <section class="sheet-section">
+                <h2 class="sheet-h">Talking points</h2>
+                <ul class="prep-points">
+                    @foreach (var p in r.InterviewTalkingPoints)
+                    {
+                        <li>@p.Text</li>
+                    }
+                </ul>
+            </section>
+        }
+
+        <section class="sheet-section">
+            <h2 class="sheet-h">STAR stories</h2>
+            @if (Model.Stories.Count > 0)
+            {
+                @foreach (var s in Model.Stories)
+                {
+                    <div class="prep-story">
+                        <h3 class="prep-story-title">@s.Title</h3>
+                        <div class="artifact-view">@RepoSummary.Services.MarkdownRenderer.ToHtml(s.Content)</div>
+                        @if (!string.IsNullOrEmpty(s.EvidenceCsv))
+                        {
+                            <p class="prep-evidence">Evidence: @s.EvidenceCsv</p>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <p class="hint no-print">No saved STAR story for this repo yet. Open the <a asp-page="/Analysis" asp-route-owner="@r.Owner" asp-route-repo="@r.Name" asp-route-saved="true">analysis</a> and generate an interview story — it'll be saved and appear here.</p>
+                <p class="prep-empty">STAR story: _____________________________________________</p>
+            }
+        </section>
+
+        @if (r.Suggestions.Count > 0)
+        {
+            <section class="sheet-section">
+                <h2 class="sheet-h">Be ready to address</h2>
+                <ul class="prep-points">
+                    @foreach (var sug in r.Suggestions)
+                    {
+                        <li>@sug</li>
+                    }
+                </ul>
+            </section>
+        }
+
+        <div class="sheet-foot">
+            <span class="sheet-brand">Generated by RepoSummary</span>
+            @if (Model.SavedAt is not null)
+            {
+                <span class="muted">Analyzed @Model.SavedAt.Value.ToLocalTime().ToString("MMM d, yyyy")</span>
+            }
+        </div>
+    </article>
+}

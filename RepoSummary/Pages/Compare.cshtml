@@ -1,0 +1,194 @@
+@page
+@using RepoSummary.Models
+@model CompareModel
+@{
+    ViewData["Title"] = "Compare repositories";
+    string[] palette = { "#3178c6", "#f1e05a", "#e34c26", "#563d7c", "#89e051", "#dea584", "#178600", "#858585" };
+
+    string Api(GitHubRepoAnalysisResult x)
+    {
+        var parts = new List<string>();
+        if (x.ControllerCount > 0) parts.Add($"{x.ControllerCount} controller{(x.ControllerCount == 1 ? "" : "s")}");
+        if (x.HasOpenApi) parts.Add("OpenAPI");
+        return parts.Count > 0 ? string.Join(" · ", parts) : "—";
+    }
+    string Ci(GitHubRepoAnalysisResult x) =>
+        x.Workflows.Count > 0 ? string.Join(", ", x.Workflows.Select(w => w.Name)) : "—";
+    string Sec(GitHubRepoAnalysisResult x) =>
+        x.SecurityTools.Count > 0 ? string.Join(", ", x.SecurityTools) : "—";
+    string Rel(GitHubRepoAnalysisResult x) =>
+        x.ReleaseCount is > 0 ? (x.ReleaseCount >= 10 ? "10+" : x.ReleaseCount.ToString()!) : "—";
+    int Sig(GitHubRepoAnalysisResult x) => x.Maturity?.Signals.Count(s => s.Present) ?? 0;
+    string Or(string? s) => string.IsNullOrWhiteSpace(s) ? "—" : s!;
+}
+
+<h1>Compare repositories</h1>
+<p class="lead">Put two repositories you've analyzed side by side — grade, activity, stack, and signals. Reads saved analyses, so it's instant and free.</p>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="alert alert-info">@Model.Notice</div>
+}
+
+@if (Model.Available.Count < 2)
+{
+    <div class="card">
+        <p class="hint">You need at least two analyzed repositories to compare. <a asp-page="/Index">Analyze a couple</a>, then come back.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <form method="get" class="compare-pick">
+            <div class="compare-pick-fields">
+                <label class="cmp-field">
+                    <span>Repository A</span>
+                    <select name="a" class="input">
+                        <option value="">Choose…</option>
+                        @foreach (var opt in Model.Available)
+                        {
+                            <option value="@opt.FullName" selected="@(opt.FullName == Model.SelectedA)">@opt.FullName</option>
+                        }
+                    </select>
+                </label>
+                <span class="cmp-vs">vs</span>
+                <label class="cmp-field">
+                    <span>Repository B</span>
+                    <select name="b" class="input">
+                        <option value="">Choose…</option>
+                        @foreach (var opt in Model.Available)
+                        {
+                            <option value="@opt.FullName" selected="@(opt.FullName == Model.SelectedB)">@opt.FullName</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <button class="btn btn-primary" type="submit">Compare</button>
+        </form>
+    </div>
+
+    @if (Model.Left is not null && Model.Right is not null)
+    {
+        var l = Model.Left;
+        var rr = Model.Right;
+
+        <div class="card">
+            <div class="cmp-actions no-print"><button class="btn" type="button" data-print>Save as PDF</button></div>
+            <div class="table-scroll">
+                <table class="cmp-table">
+                    <thead>
+                        <tr>
+                            <th class="cmp-metric"></th>
+                            <th><a href="@l.HtmlUrl" target="_blank" rel="noopener">@l.FullName</a></th>
+                            <th><a href="@rr.HtmlUrl" target="_blank" rel="noopener">@rr.FullName</a></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="cmp-metric">Maturity</td>
+                            <td class="@((l.Maturity?.Score ?? 0) > (rr.Maturity?.Score ?? 0) ? "win" : "")">
+                                @if (l.Maturity is not null){<span class="cmp-grade grade-@l.Maturity.Grade.ToLowerInvariant()">@l.Maturity.Grade</span> <text>@l.Maturity.Score / 100</text>}else{<text>—</text>}
+                            </td>
+                            <td class="@((rr.Maturity?.Score ?? 0) > (l.Maturity?.Score ?? 0) ? "win" : "")">
+                                @if (rr.Maturity is not null){<span class="cmp-grade grade-@rr.Maturity.Grade.ToLowerInvariant()">@rr.Maturity.Grade</span> <text>@rr.Maturity.Score / 100</text>}else{<text>—</text>}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Health signals</td>
+                            <td class="@(Sig(l) > Sig(rr) ? "win" : "")">@Sig(l) / @(l.Maturity?.Signals.Count ?? 0) present</td>
+                            <td class="@(Sig(rr) > Sig(l) ? "win" : "")">@Sig(rr) / @(rr.Maturity?.Signals.Count ?? 0) present</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Stars</td>
+                            <td class="@(l.Stars > rr.Stars ? "win" : "")">@l.Stars.ToString("N0")</td>
+                            <td class="@(rr.Stars > l.Stars ? "win" : "")">@rr.Stars.ToString("N0")</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Forks</td>
+                            <td class="@(l.Forks > rr.Forks ? "win" : "")">@l.Forks.ToString("N0")</td>
+                            <td class="@(rr.Forks > l.Forks ? "win" : "")">@rr.Forks.ToString("N0")</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Open issues</td>
+                            <td>@l.OpenIssues.ToString("N0")</td>
+                            <td>@rr.OpenIssues.ToString("N0")</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Primary language</td>
+                            <td>@Or(l.PrimaryLanguage)</td>
+                            <td>@Or(rr.PrimaryLanguage)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Languages</td>
+                            <td>
+                                <div class="lang-bar cmp-lang">
+                                    @for (var i = 0; i < l.Languages.Count; i++){<span style="width:@(l.Languages[i].Percentage)%; background:@palette[i % palette.Length];" title="@l.Languages[i].Name @l.Languages[i].Percentage%"></span>}
+                                </div>
+                                <div class="cmp-langnames">@(l.Languages.Count > 0 ? string.Join(", ", l.Languages.Take(4).Select(x => x.Name)) : "—")</div>
+                            </td>
+                            <td>
+                                <div class="lang-bar cmp-lang">
+                                    @for (var i = 0; i < rr.Languages.Count; i++){<span style="width:@(rr.Languages[i].Percentage)%; background:@palette[i % palette.Length];" title="@rr.Languages[i].Name @rr.Languages[i].Percentage%"></span>}
+                                </div>
+                                <div class="cmp-langnames">@(rr.Languages.Count > 0 ? string.Join(", ", rr.Languages.Take(4).Select(x => x.Name)) : "—")</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Architecture</td>
+                            <td>@Or(l.ArchitecturePattern)</td>
+                            <td>@Or(rr.ArchitecturePattern)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Database</td>
+                            <td>@Or(l.DatabaseTech)</td>
+                            <td>@Or(rr.DatabaseTech)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">API</td>
+                            <td>@Api(l)</td>
+                            <td>@Api(rr)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">CI / CD</td>
+                            <td>@Ci(l)</td>
+                            <td>@Ci(rr)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Security</td>
+                            <td>@Sec(l)</td>
+                            <td>@Sec(rr)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Dependencies</td>
+                            <td class="@(l.Packages.Count > rr.Packages.Count ? "win" : "")">@l.Packages.Count</td>
+                            <td class="@(rr.Packages.Count > l.Packages.Count ? "win" : "")">@rr.Packages.Count</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Releases</td>
+                            <td>@Rel(l)</td>
+                            <td>@Rel(rr)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">License</td>
+                            <td>@Or(l.License)</td>
+                            <td>@Or(rr.License)</td>
+                        </tr>
+                        <tr>
+                            <td class="cmp-metric">Created</td>
+                            <td>@(l.CreatedAt?.ToString("MMM yyyy") ?? "—")</td>
+                            <td>@(rr.CreatedAt?.ToString("MMM yyyy") ?? "—")</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="hint">A subtle highlight marks the higher value on comparable metrics. "—" means the signal wasn't detected.</p>
+        </div>
+    }
+    else
+    {
+        <div class="empty-prompt">
+            <svg height="28" viewBox="0 0 16 16" width="28" aria-hidden="true" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h3.5C6.216 0 7 .784 7 1.75v3.5A1.75 1.75 0 0 1 5.25 7H1.75A1.75 1.75 0 0 1 0 5.25Zm9 0C9 .784 9.784 0 10.75 0h3.5C15.216 0 16 .784 16 1.75v3.5A1.75 1.75 0 0 1 14.25 7h-3.5A1.75 1.75 0 0 1 9 5.25Zm-9 9C0 9.784.784 9 1.75 9h3.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 5.25 16H1.75A1.75 1.75 0 0 1 0 14.25Zm9 0C9 9.784 9.784 9 10.75 9h3.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16h-3.5A1.75 1.75 0 0 1 9 14.25Z"></path></svg>
+            <p>Pick a repository for each side above and hit <strong>Compare</strong> to see them line up.</p>
+        </div>
+    }
+}

@@ -1,0 +1,85 @@
+@using RepoSummary.Services
+@model IGrouping<string, RepoSummary.Models.GeneratedCareerArtifact>
+@{
+    var type = Model.Key;
+    var items = Model.ToList();
+    var isBullets = type == "ResumeBullet";
+
+    string label = type switch
+    {
+        "ResumeBullet" => "Résumé bullets",
+        "InterviewStory" => "Interview story (STAR)",
+        "ProjectSummary" => "Project summary",
+        "CoverLetter" => "Cover letter",
+        "LinkedInAbout" => "LinkedIn “About”",
+        "TechnicalCaseStudy" => "Technical case study",
+        "ReadmeImprovements" => "README improvements",
+        "JobFitGaps" => "Job-fit gaps",
+        "HireabilityTips" => "How to be more hireable",
+        "PortfolioNarrative" => "Portfolio summary",
+        _ => type
+    };
+
+    var allText = isBullets
+        ? string.Join("\n", items.Select(i => "• " + i.Content))
+        : string.Join("\n\n", items.Select(i => (string.IsNullOrWhiteSpace(i.Title) ? "" : i.Title + "\n") + i.Content));
+}
+
+<details class="result-section" open>
+    <summary>
+        <span class="result-title">@label</span>
+        <span class="result-count">@items.Count</span>
+        <button class="copy-btn result-copy" type="button" data-copy="@allText">Copy all</button>
+    </summary>
+
+    <div class="result-body">
+        @if (isBullets)
+        {
+            <ul class="result-bullets">
+                @foreach (var b in items)
+                {
+                    <li>
+                        <span class="bullet-text">@b.Content</span>
+                        @if (b.Evidence.Count > 0)
+                        {
+                            <span class="bullet-ev">
+                                @foreach (var e in b.Evidence)
+                                {
+                                    <button type="button" class="chip evidence-chip mini" data-evidence="@e" title="Show this evidence">@e</button>
+                                }
+                            </span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            @foreach (var art in items)
+            {
+                <div class="artifact">
+                    <div class="artifact-bar">
+                        @if (!string.IsNullOrWhiteSpace(art.Title))
+                        {
+                            <span class="artifact-title">@art.Title</span>
+                        }
+                        <button class="copy-btn" type="button" data-copy-closest=".artifact">Copy</button>
+                        <button class="edit-btn" type="button" data-edit-toggle>Edit</button>
+                    </div>
+                    <div class="artifact-view markdown-body">@MarkdownRenderer.ToHtml(art.Content)</div>
+                    <textarea class="artifact-edit" data-autosize aria-label="Edit generated text">@art.Content</textarea>
+                    @if (art.Evidence.Count > 0)
+                    {
+                        <div class="chips">
+                            <span class="chips-label">Evidence:</span>
+                            @foreach (var e in art.Evidence)
+                            {
+                                <button type="button" class="chip evidence-chip" data-evidence="@e" title="Show this evidence">@e</button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</details>

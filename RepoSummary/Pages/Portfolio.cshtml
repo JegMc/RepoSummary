@@ -1,0 +1,91 @@
+@page
+@model PortfolioModel
+@{
+    ViewData["Title"] = "Portfolio synthesis";
+}
+
+<h1>Portfolio synthesis</h1>
+<p class="lead">Pick several repositories you've analyzed and generate one story that ties them together — a portfolio summary plus résumé bullets that speak to your whole body of work.</p>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger">@Model.ErrorMessage</div>
+}
+
+@if (Model.Available.Count == 0)
+{
+    <div class="card">
+        <p class="hint">You haven't analyzed anything yet. <a asp-page="/Index">Analyze a few repositories</a>, then come back to build a portfolio from them.</p>
+    </div>
+}
+else if (Model.Available.Count == 1)
+{
+    <div class="card">
+        <p class="hint">A portfolio ties together <strong>two or more</strong> repositories. You've analyzed one so far — <a asp-page="/Index">analyze another</a> and this page will let you combine them.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <h2>Choose repositories</h2>
+        @if (!Model.AiConfigured)
+        {
+            <div class="alert alert-info">
+                <strong>One-time setup:</strong> synthesis needs your own OpenAI or Anthropic key — add it on the Settings page (stored encrypted, no restart).
+            </div>
+            <a class="btn btn-primary" asp-page="/Settings" asp-route-returnUrl="@(Request.Path + Request.QueryString)">Add an API key in Settings →</a>
+        }
+        else
+        {
+            <form method="post" class="gen-form" data-loading="Generating…">
+                <fieldset class="gen-group">
+                    <legend>Repositories</legend>
+                    <div class="gen-checks">
+                        @foreach (var a in Model.Available)
+                        {
+                            <label class="gen-check">
+                                <input type="checkbox" name="Selected" value="@a.FullName" checked="@(Model.Selected?.Contains(a.FullName) ?? false)" />
+                                @a.FullName
+                                @if (!string.IsNullOrEmpty(a.MaturityGrade))
+                                {
+                                    <span class="recent-grade grade-@a.MaturityGrade.ToLowerInvariant()">@a.MaturityGrade</span>
+                                }
+                            </label>
+                        }
+                    </div>
+                </fieldset>
+
+                <fieldset class="gen-group">
+                    <legend>Tone</legend>
+                    <div class="gen-checks">
+                        <label class="gen-check"><input type="radio" name="Tone" value="balanced" checked="@(Model.Tone != "confident" && Model.Tone != "honest")" /> Balanced</label>
+                        <label class="gen-check"><input type="radio" name="Tone" value="confident" checked="@(Model.Tone == "confident")" /> Confident</label>
+                        <label class="gen-check"><input type="radio" name="Tone" value="honest" checked="@(Model.Tone == "honest")" /> Honest critique</label>
+                    </div>
+                </fieldset>
+
+                <details class="gen-jd" open="@(!string.IsNullOrWhiteSpace(Model.Job))">
+                    <summary>Tailor to a job description (optional)</summary>
+                    <textarea class="input gen-jd-text" name="Job" rows="5" placeholder="Paste a job description to aim the portfolio at that role…" spellcheck="false">@Model.Job</textarea>
+                </details>
+
+                <button class="btn btn-primary" type="submit">Generate portfolio</button>
+                <span class="hint gen-note">Pick two or more. One API call across all selected repos.</span>
+            </form>
+        }
+    </div>
+
+    @if (Model.Artifacts is { Count: > 0 })
+    {
+        <div class="card">
+            <h2>Your portfolio</h2>
+            <div class="gen-results">
+                @foreach (var group in Model.Artifacts.GroupBy(a => a.ArtifactType))
+                {
+                    <partial name="_ResultGroup" model="group" />
+                }
+                <p class="hint">Click a section heading to collapse it. Use <strong>Edit</strong> to tweak wording.</p>
+            </div>
+        </div>
+    }
+}

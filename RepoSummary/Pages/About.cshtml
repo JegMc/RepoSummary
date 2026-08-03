@@ -1,0 +1,58 @@
+@page
+@model AboutModel
+@{
+    ViewData["Title"] = "About";
+}
+
+<h1>About RepoSummary</h1>
+
+<div class="card">
+    <p class="lead">
+        RepoSummary helps developers translate real project work into confident,
+        specific, interview-ready language — without exaggerating.
+    </p>
+    <p>
+        Most AI résumé tools invent impressive-sounding claims. RepoSummary does the
+        opposite: it starts from <strong>evidence</strong>. It reads a public GitHub
+        repository, surfaces the facts — technologies, structure, commits, dependencies,
+        and documentation — and only then helps you talk about that work.
+    </p>
+    <p>
+        <a class="btn btn-primary" asp-page="/Index">Analyze a repository →</a>
+    </p>
+</div>
+
+<div class="card">
+    <h2>What it does</h2>
+    <ol class="clean">
+        <li><strong>Reads the repo.</strong> Enter a public repository (owner/repo or a URL). RepoSummary pulls metadata, the README, recent commits, languages, the full file tree, and parsed dependency manifests through GitHub's public API.</li>
+        <li><strong>Extracts evidence.</strong> It detects technologies and versions, the architecture pattern, database/ORM, API surface, CI/CD workflows, security tooling, releases, and commit patterns — then rolls them into an A–F project maturity score.</li>
+        <li><strong>Suggests how to talk about it.</strong> Rule-based résumé angles and interview talking points come free, each tied to what's actually in the repo.</li>
+        <li><strong>Keeps a library.</strong> Analyses are saved locally so you can reopen them, see your skills add up across projects, compare two repos, and build a portfolio.</li>
+    </ol>
+</div>
+
+<div class="card">
+    <h2>AI writing <span class="tag-optional">optional</span></h2>
+    <p>
+        Add your own OpenAI (ChatGPT) or Anthropic (Claude) key in
+        <a asp-page="/Settings" asp-route-returnUrl="/About">Settings</a> to generate
+        résumé bullets, STAR interview stories, project summaries, cover letters, a
+        LinkedIn "About", technical case studies, and README improvements — with
+        streaming output and the option to tailor everything to a job description.
+    </p>
+    <p class="hint">
+        The key stays encrypted on this machine and you pay your provider directly.
+        Everything else — evidence, detected tech, maturity score, and rule-based
+        angles — works with no key at all.
+    </p>
+</div>
+
+<div class="card">
+    <h2>The core rule</h2>
+    <p>
+        Every strong claim ties back to real repository evidence. If the app can't
+        point to a commit, a file, a technology, or a piece of documentation, it doesn't
+        make the claim — and the generated writing is instructed to do the same.
+    </p>
+</div>

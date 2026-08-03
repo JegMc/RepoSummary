@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RepoSummary.Tests/RepoSummary.Tests.csproj" />
+  <Project Path="RepoSummary/RepoSummary.csproj" />
+</Solution>

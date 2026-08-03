@@ -355,6 +355,45 @@
     askRepo(form);
   });
 
+  // Generic streamed POST → text pane (rendered as Markdown when done). Used by Summarize.
+  function streamInto(url, form, out, thinking) {
+    if (!out) return;
+    out.hidden = false;
+    out.classList.remove("markdown-body", "rendered-md");
+    out.textContent = thinking;
+    var btn = form.querySelector('button[type="submit"]');
+    var original = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.classList.add("is-loading"); }
+    fetch(url, { method: "POST", body: new FormData(form) })
+      .then(function (resp) {
+        if (!resp.ok || !resp.body) { out.textContent = "Couldn't complete that (" + resp.status + ")."; return; }
+        var reader = resp.body.getReader();
+        var dec = new TextDecoder();
+        var first = true;
+        function pump() {
+          return reader.read().then(function (r) {
+            if (r.done) return;
+            if (first) { out.textContent = ""; first = false; }
+            out.textContent += dec.decode(r.value, { stream: true });
+            out.scrollTop = out.scrollHeight;
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .then(function () { renderMarkdownInto(out); })
+      .catch(function () { out.textContent += "\n\n[Interrupted.]"; })
+      .finally(function () { if (btn) { btn.disabled = false; btn.classList.remove("is-loading"); btn.textContent = original; } });
+  }
+
+  document.addEventListener("submit", function (e) {
+    var f = e.target.closest("[data-summarize-form]");
+    if (!f) return;
+    e.preventDefault();
+    var out = f.closest(".card").querySelector("[data-summary-out]");
+    streamInto("/summarize/stream", f, out, "Summarizing…");
+  });
+
   // "Explain this file" — jump to the Ask tab with a preset question, then run it.
   document.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-explain]");

@@ -160,6 +160,30 @@ app.MapPost("/ask/stream", async (
     }
 }).DisableAntiforgery();
 
+// Summarize a repo's README (README-tab "Summarize with AI" button). Reuses the grounded
+// Q&A pipeline with a fixed prompt, streamed. Same-origin; only spends the user's own key.
+app.MapPost("/summarize/stream", async (
+    HttpContext ctx, IAnalysisStore store, ICareerArtifactGenerator generator) =>
+{
+    var form = await ctx.Request.ReadFormAsync(ctx.RequestAborted);
+    var snapshot = await store.GetSavedAsync(form["owner"].ToString(), form["repo"].ToString(), ctx.RequestAborted);
+    if (snapshot is null)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+        await ctx.Response.WriteAsync("No saved analysis found — run the analysis first.", ctx.RequestAborted);
+        return;
+    }
+
+    const string prompt = "Summarize what this project is and does in 3-4 clear, plain-English " +
+        "sentences for someone skimming it — based on its README and the evidence. No preamble.";
+    ctx.Response.ContentType = "text/plain; charset=utf-8";
+    await foreach (var chunk in generator.AnswerAsync(snapshot.Result, prompt, ctx.RequestAborted))
+    {
+        await ctx.Response.WriteAsync(chunk, ctx.RequestAborted);
+        await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+    }
+}).DisableAntiforgery();
+
 // Render Markdown to sanitized HTML (used to format streamed Ask/generation output on the
 // client once streaming finishes). Output is sanitized by MarkdownRenderer, so it's safe HTML.
 app.MapPost("/render/markdown", async (HttpContext ctx) =>

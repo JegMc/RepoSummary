@@ -892,6 +892,21 @@ else
             @if (r.HasReadme)
             {
                 <section class="tabpanel" role="tabpanel" data-panel="readme" aria-labelledby="t-readme" tabindex="0">
+                    @if (Model.AiConfigured)
+                    {
+                        <div class="card">
+                            <div class="card-head-row">
+                                <h2>README summary</h2>
+                                <form data-summarize-form>
+                                    <input type="hidden" name="owner" value="@r.Owner" />
+                                    <input type="hidden" name="repo" value="@r.Name" />
+                                    <button class="btn" type="submit">Summarize with AI</button>
+                                </form>
+                            </div>
+                            <p class="hint">A few plain-English sentences on what this project is and does — grounded in the README and evidence.</p>
+                            <div class="ask-answer" data-summary-out hidden></div>
+                        </div>
+                    }
                     <div class="card">
                         <div class="readme markdown-body">
                             @RepoSummary.Services.ReadmeRenderer.ToHtml(r.ReadmeContent!, r.Owner, r.Name, r.DefaultBranch)

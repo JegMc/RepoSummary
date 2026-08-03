@@ -35,3 +35,8 @@ coverage*.json
 # ---- OS cruft ----
 .DS_Store
 Thumbs.db
+
+# ---- Internal planning docs (kept local, not published) ----
+/CLAUDE.md
+/ROADMAP.md
+/STATUS.md

@@ -16,6 +16,7 @@ public interface IAnalysisStore
     Task SaveAnalysisAsync(GitHubRepoAnalysisResult result, CancellationToken ct = default);
     Task<SavedSnapshot?> GetSavedAsync(string owner, string repo, CancellationToken ct = default);
     Task<IReadOnlyList<SavedAnalysis>> GetRecentAsync(int take, CancellationToken ct = default);
+    Task<IReadOnlyList<MaturitySnapshot>> GetMaturityHistoryAsync(string fullName, CancellationToken ct = default);
     Task<IReadOnlyList<GitHubRepoAnalysisResult>> GetSavedManyAsync(IEnumerable<string> fullNames, CancellationToken ct = default);
     Task<IReadOnlyList<SkillCount>> GetSkillInventoryAsync(CancellationToken ct = default);
     Task SaveStoriesAsync(string repoFullName, IEnumerable<GeneratedCareerArtifact> stories, CancellationToken ct = default);
@@ -51,7 +52,39 @@ public class AnalysisStore : IAnalysisStore
 
         if (row.Id == 0) _db.Analyses.Add(row);
         await _db.SaveChangesAsync(ct);
+
+        // Record a maturity data point for the trend — when it's the first reading, the score
+        // changed, or it's been 12h+, so the history reflects real movement rather than re-views.
+        if (result.Maturity is not null)
+        {
+            var latest = await _db.MaturityHistory.AsNoTracking()
+                .Where(h => h.RepoFullName == result.FullName)
+                .OrderByDescending(h => h.RecordedAt)
+                .FirstOrDefaultAsync(ct);
+
+            var shouldRecord = latest is null
+                || latest.Score != result.Maturity.Score
+                || DateTime.UtcNow - latest.RecordedAt >= TimeSpan.FromHours(12);
+
+            if (shouldRecord)
+            {
+                _db.MaturityHistory.Add(new MaturitySnapshot
+                {
+                    RepoFullName = result.FullName,
+                    RecordedAt = DateTime.UtcNow,
+                    Score = result.Maturity.Score,
+                    Grade = result.Maturity.Grade
+                });
+                await _db.SaveChangesAsync(ct);
+            }
+        }
     }
+
+    public async Task<IReadOnlyList<MaturitySnapshot>> GetMaturityHistoryAsync(string fullName, CancellationToken ct = default) =>
+        await _db.MaturityHistory.AsNoTracking()
+            .Where(h => h.RepoFullName == fullName)
+            .OrderBy(h => h.RecordedAt)
+            .ToListAsync(ct);
 
     public async Task<SavedSnapshot?> GetSavedAsync(string owner, string repo, CancellationToken ct = default)
     {

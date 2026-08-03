@@ -47,6 +47,15 @@ public class AnalysisModel : PageModel
     public bool ServedFromCache { get; private set; }
     public bool RefreshingInBackground { get; private set; }
 
+    // Grade-over-time history (G7).
+    public IReadOnlyList<Data.MaturitySnapshot> MaturityHistory { get; private set; } = Array.Empty<Data.MaturitySnapshot>();
+
+    private async Task PopulateHistoryAsync(CancellationToken ct)
+    {
+        if (Result is not null)
+            MaturityHistory = await _store.GetMaturityHistoryAsync(Result.FullName, ct);
+    }
+
     // AI generation state.
     public bool AiConfigured => _generator.IsConfigured;
     public bool GenerationAttempted { get; private set; }
@@ -83,6 +92,7 @@ public class AnalysisModel : PageModel
                     SavedAt = snapshot.AnalyzedAt;
                     IsSaved = true;
                     _cache.Set(CacheKey(owner, repo), Result, CacheFor);
+                    await PopulateHistoryAsync(ct);
                     return Page();
                 }
             }
@@ -101,12 +111,14 @@ public class AnalysisModel : PageModel
                     if (DateTime.UtcNow - snapshot.AnalyzedAt > FreshWindow)
                         RefreshingInBackground = QueueBackgroundRefresh(owner, repo);
 
+                    await PopulateHistoryAsync(ct);
                     return Page();
                 }
             }
         }
 
         await LoadFreshAsync(owner, repo, ct);
+        await PopulateHistoryAsync(ct);
         return Page();
     }
 
@@ -193,6 +205,7 @@ public class AnalysisModel : PageModel
             GenerationError = outcome.ErrorMessage;
         }
 
+        await PopulateHistoryAsync(ct);
         return Page();
     }
 

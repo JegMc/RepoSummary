@@ -192,6 +192,49 @@ public class GitHubRepositoryService : IGitHubRepositoryService
         }
     }
 
+    public async Task<ServiceResult<List<UserRepoSummary>>> GetUserReposAsync(
+        string user, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await SendGetAsync(
+                $"users/{Uri.EscapeDataString(user)}/repos?per_page=100&sort=updated&type=owner", cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return ServiceResult<List<UserRepoSummary>>.Fail($"GitHub user '{user}' was not found.");
+            if (!response.IsSuccessStatusCode)
+                return ServiceResult<List<UserRepoSummary>>.Fail(
+                    DescribeFailure(response, new RepoReference(user, "")));
+
+            var dtos = await ReadJsonAsync<List<RepoDto>>(response, cancellationToken) ?? new();
+            var list = dtos
+                .Where(d => !d.Fork && !string.IsNullOrEmpty(d.Name))
+                .Select(d => new UserRepoSummary
+                {
+                    Owner = d.Owner?.Login ?? user,
+                    Name = d.Name!,
+                    Description = d.Description,
+                    Stars = d.Stars,
+                    Language = d.Language,
+                    UpdatedAt = d.UpdatedAt
+                })
+                .OrderByDescending(r => r.Stars)
+                .ThenByDescending(r => r.UpdatedAt)
+                .ToList();
+            return ServiceResult<List<UserRepoSummary>>.Ok(list);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Network error listing repos for {User}", user);
+            return ServiceResult<List<UserRepoSummary>>.Fail("Could not reach GitHub. Check your connection and try again.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error listing repos for {User}", user);
+            return ServiceResult<List<UserRepoSummary>>.Fail("Something went wrong listing that user's repositories.");
+        }
+    }
+
     private static string DescribeFailure(HttpResponseMessage response, RepoReference reference)
     {
         switch (response.StatusCode)

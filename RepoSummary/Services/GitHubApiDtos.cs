@@ -19,6 +19,7 @@ internal sealed class RepoDto
     [JsonPropertyName("html_url")] public string? HtmlUrl { get; set; }
     [JsonPropertyName("owner")] public OwnerDto? Owner { get; set; }
     [JsonPropertyName("license")] public LicenseDto? License { get; set; }
+    [JsonPropertyName("fork")] public bool Fork { get; set; }
 }
 
 internal sealed class OwnerDto

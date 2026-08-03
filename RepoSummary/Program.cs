@@ -159,6 +159,45 @@ app.MapPost("/ask/stream", async (
     }
 }).DisableAntiforgery();
 
+// Render Markdown to sanitized HTML (used to format streamed Ask/generation output on the
+// client once streaming finishes). Output is sanitized by MarkdownRenderer, so it's safe HTML.
+app.MapPost("/render/markdown", async (HttpContext ctx) =>
+{
+    var form = await ctx.Request.ReadFormAsync(ctx.RequestAborted);
+    var html = RepoSummary.Services.MarkdownRenderer.ToHtml(form["text"].ToString()).Value ?? "";
+    ctx.Response.ContentType = "text/html; charset=utf-8";
+    await ctx.Response.WriteAsync(html, ctx.RequestAborted);
+}).DisableAntiforgery();
+
+// Embeddable maturity-grade badge (G3): an SVG built from the saved analysis, cache-friendly
+// so GitHub's image proxy can serve it. Paste ![grade](…/badge/owner/repo) into a README.
+app.MapGet("/badge/{owner}/{repo}", async (string owner, string repo, IAnalysisStore store, HttpContext ctx) =>
+{
+    var snapshot = await store.GetSavedAsync(owner, repo, ctx.RequestAborted);
+    var m = snapshot?.Result.Maturity;
+    var svg = RepoSummary.Services.ExportBuilder.BadgeSvg(m?.Grade, m?.Score);
+    ctx.Response.ContentType = "image/svg+xml";
+    ctx.Response.Headers.CacheControl = "max-age=300";
+    await ctx.Response.WriteAsync(svg, ctx.RequestAborted);
+});
+
+// Exports (G2): a Markdown summary and the raw JSON of a saved analysis, as downloads.
+app.MapGet("/export/{owner}/{repo}/summary.md", async (string owner, string repo, IAnalysisStore store, HttpContext ctx) =>
+{
+    var snapshot = await store.GetSavedAsync(owner, repo, ctx.RequestAborted);
+    if (snapshot is null) return Results.NotFound("Analyze this repository first.");
+    var md = RepoSummary.Services.ExportBuilder.ToMarkdown(snapshot.Result);
+    return Results.File(System.Text.Encoding.UTF8.GetBytes(md), "text/markdown", $"{owner}-{repo}-summary.md");
+});
+app.MapGet("/export/{owner}/{repo}/analysis.json", async (string owner, string repo, IAnalysisStore store, HttpContext ctx) =>
+{
+    var snapshot = await store.GetSavedAsync(owner, repo, ctx.RequestAborted);
+    if (snapshot is null) return Results.NotFound("Analyze this repository first.");
+    var json = System.Text.Json.JsonSerializer.Serialize(snapshot.Result,
+        new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+    return Results.File(System.Text.Encoding.UTF8.GetBytes(json), "application/json", $"{owner}-{repo}-analysis.json");
+});
+
 // In development, pop open a Chrome window pointing at the app once it's listening.
 if (app.Environment.IsDevelopment())
 {

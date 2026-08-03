@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "RepoSummary — Analyze this repo",
+  "version": "1.0.0",
+  "description": "Adds an 'Analyze in RepoSummary' button to GitHub repository pages.",
+  "icons": { "48": "icon.png", "128": "icon.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

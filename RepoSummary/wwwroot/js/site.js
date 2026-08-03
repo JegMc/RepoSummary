@@ -278,10 +278,23 @@
         }
         return pump();
       })
+      .then(function () { renderMarkdownInto(pre); })
       .catch(function () { pre.textContent += "\n\n[Streaming interrupted.]"; })
       .finally(function () {
         if (btn) { btn.disabled = false; btn.classList.remove("is-loading"); btn.textContent = original; }
       });
+  }
+
+  // Render streamed plain-Markdown into sanitized HTML once a stream finishes (B2).
+  function renderMarkdownInto(el) {
+    var text = el.textContent;
+    if (!text || !text.trim()) return;
+    var fd = new FormData();
+    fd.append("text", text);
+    fetch("/render/markdown", { method: "POST", body: fd })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) { if (html) { el.innerHTML = html; el.classList.add("markdown-body", "rendered-md"); } })
+      .catch(function () { /* leave the raw text */ });
   }
 
   // ---------- Ask this repo (streamed Q&A) ----------
@@ -318,6 +331,7 @@
         }
         return pump();
       })
+      .then(function () { renderMarkdownInto(answer); })
       .catch(function () { answer.textContent += "\n\n[Interrupted.]"; })
       .finally(function () {
         if (btn) { btn.disabled = false; btn.classList.remove("is-loading"); btn.textContent = original; }
@@ -356,12 +370,27 @@
     askRepo(form);
   });
 
-  // ---------- Mermaid architecture diagram (bundled locally; progressive enhancement) ----------
+  // ---------- Mermaid diagrams (bundled locally; render when the Evidence tab is first shown) ----------
   if (window.mermaid && document.querySelector(".mermaid")) {
     try {
       var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
       window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default" });
-      window.mermaid.run({ querySelector: ".mermaid" });
+      var mermaidRan = false;
+      function runMermaid() {
+        if (mermaidRan) return;
+        mermaidRan = true;
+        try { window.mermaid.run({ querySelector: ".mermaid" }); } catch (e) { /* keep source */ }
+      }
+      // The diagrams live in the Evidence tab, which is hidden at load in js-tabs mode —
+      // rendering then would measure a 0-width panel, so defer until it's actually shown.
+      var evTab = document.querySelector('.tab-btn[data-tab="evidence"]');
+      var jsTabs = document.querySelector(".tabs.js-tabs");
+      if (jsTabs && evTab) {
+        if (evTab.classList.contains("active")) runMermaid();
+        else evTab.addEventListener("click", runMermaid, { once: true });
+      } else {
+        runMermaid();   // no JS tabs → the Evidence section is already visible
+      }
     } catch (err) { /* leave the Mermaid source visible as a fallback */ }
   }
 

@@ -209,6 +209,9 @@ else
                 Health card
             </a>
             <button class="btn" type="button" data-print>Save as PDF</button>
+            <a class="btn" href="/export/@r.Owner/@r.Name/summary.md" download>Export .md</a>
+            <a class="btn" href="/export/@r.Owner/@r.Name/analysis.json" download>Export .json</a>
+            <button class="btn" type="button" data-copy="![RepoSummary grade](@(Request.Scheme)://@(Request.Host)/badge/@r.Owner/@r.Name)" title="Copy a README badge that shows this repo's grade">Copy badge</button>
         </div>
     </header>
 
@@ -231,6 +234,34 @@ else
                     </span>
                 }
             </div>
+        </div>
+    }
+
+    @* Grade history (G7): a sparkline of maturity score over time, once there are ≥2 readings. *@
+    @if (Model.MaturityHistory.Count >= 2)
+    {
+        var hist = Model.MaturityHistory;
+        var t0 = hist[0].RecordedAt;
+        var totalSec = Math.Max(1, (hist[^1].RecordedAt - t0).TotalSeconds);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var pts = string.Join(" ", hist.Select(h =>
+        {
+            var x = 20 + (h.RecordedAt - t0).TotalSeconds / totalSec * 560;
+            var y = 70 - h.Score / 100.0 * 60;
+            return $"{x.ToString("F1", inv)},{y.ToString("F1", inv)}";
+        }));
+        <div class="card">
+            <h2>Grade history</h2>
+            <p class="hint">Maturity score across @hist.Count readings (@t0.ToLocalTime().ToString("MMM d") – @hist[^1].RecordedAt.ToLocalTime().ToString("MMM d, yyyy")). Re-analyze over time to grow the trend.</p>
+            <svg class="sparkline" viewBox="0 0 600 80" role="img" aria-label="Maturity score over time">
+                <polyline points="@pts" fill="none" stroke="var(--accent)" stroke-width="2" />
+                @foreach (var h in hist)
+                {
+                    var cx = (20 + (h.RecordedAt - t0).TotalSeconds / totalSec * 560).ToString("F1", inv);
+                    var cy = (70 - h.Score / 100.0 * 60).ToString("F1", inv);
+                    <circle cx="@cx" cy="@cy" r="3.5" fill="var(--accent)"><title>@h.Grade @h.Score/100 · @h.RecordedAt.ToLocalTime().ToString("MMM d, yyyy")</title></circle>
+                }
+            </svg>
         </div>
     }
 

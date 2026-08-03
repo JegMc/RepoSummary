@@ -19,6 +19,16 @@ public class SavedAnalysis
     public string ResultJson { get; set; } = "";
 }
 
+/// <summary>A point-in-time maturity reading for a repo, so the grade can be tracked over time.</summary>
+public class MaturitySnapshot
+{
+    public int Id { get; set; }
+    public string RepoFullName { get; set; } = "";
+    public DateTime RecordedAt { get; set; }   // UTC
+    public int Score { get; set; }
+    public string Grade { get; set; } = "";
+}
+
 /// <summary>A generated STAR interview story the user chose to keep.</summary>
 public class SavedStory
 {
@@ -36,10 +46,12 @@ public class AppDbContext : DbContext
 
     public DbSet<SavedAnalysis> Analyses => Set<SavedAnalysis>();
     public DbSet<SavedStory> Stories => Set<SavedStory>();
+    public DbSet<MaturitySnapshot> MaturityHistory => Set<MaturitySnapshot>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<SavedAnalysis>().HasIndex(a => a.FullName).IsUnique();
         b.Entity<SavedStory>().HasIndex(s => s.RepoFullName);
+        b.Entity<MaturitySnapshot>().HasIndex(s => s.RepoFullName);
     }
 }

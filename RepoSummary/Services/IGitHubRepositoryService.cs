@@ -12,4 +12,10 @@ public interface IGitHubRepositoryService
     Task<ServiceResult<GitHubRepoAnalysisResult>> AnalyzeAsync(
         RepoReference reference,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Lists a user's public, non-fork repositories, ranked by stars — for the
+    /// profile-level view. Never throws for expected failures.</summary>
+    Task<ServiceResult<List<UserRepoSummary>>> GetUserReposAsync(
+        string user,
+        CancellationToken cancellationToken = default);
 }

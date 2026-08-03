@@ -1124,6 +1124,9 @@ details.how[open] summary { margin-bottom: .5rem; }
 .bar-fill { display: block; height: 100%; min-width: 4px; background: var(--accent); border-radius: 999px; }
 .bar-val { font-size: .82rem; font-variant-numeric: tabular-nums; color: var(--fg); min-width: 1.4rem; text-align: right; }
 
+/* Grade-history sparkline (G7). */
+.sparkline { width: 100%; height: auto; max-height: 90px; display: block; overflow: visible; }
+
 /* Commit timeline — dots on a time axis. */
 .timeline { margin: .1rem 0 1.1rem; }
 .timeline-caption { font-size: .82rem; color: var(--fg-muted); margin-bottom: .35rem; }
@@ -1142,6 +1145,17 @@ details.how[open] summary { margin-bottom: .5rem; }
    basis becomes a 320px HEIGHT — reset it so the select is its natural single-row height. */
 .cmp-field select.input { width: 100%; flex: none; }
 .cmp-vs { padding-bottom: .55rem; color: var(--fg-muted); font-size: .85rem; }
+
+/* Profile page (G1) — a ranked grid of a user's repositories. */
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .8rem; margin-top: .8rem; }
+.profile-card { border: 1px solid var(--border); border-radius: 9px; background: var(--canvas); padding: .8rem 1rem .9rem; display: flex; flex-direction: column; gap: .45rem; }
+.profile-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.profile-name { font-weight: 600; font-size: .95rem; }
+.profile-stars { flex: none; font-size: .8rem; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.profile-desc { margin: 0; font-size: .85rem; color: var(--fg-muted); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.profile-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .8rem; font-size: .78rem; margin-top: auto; }
+.profile-lang { color: var(--fg-muted); }
+.profile-analyze { margin-left: auto; font-weight: 600; }
 
 /* Reusable "nothing here yet — do this" placeholder (Compare, pre-generation, etc.) */
 .empty-prompt {
@@ -1219,6 +1233,10 @@ button.chip.ask-example:hover { color: var(--accent); border-color: var(--accent
     background: var(--canvas-subtle); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 1rem 1.2rem; max-height: 60vh; overflow: auto;
 }
+/* Once streamed output is rendered as Markdown, drop the raw-text whitespace/monospace. */
+.rendered-md { white-space: normal !important; font-family: var(--sans) !important; }
+.rendered-md > :first-child { margin-top: 0; }
+.rendered-md > :last-child { margin-bottom: 0; }
 
 @media print {
     /* Chrome/Edge: keep the grade badges, language bar and chips in colour. */

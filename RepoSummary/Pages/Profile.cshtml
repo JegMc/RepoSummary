@@ -1,0 +1,63 @@
+@page
+@model ProfileModel
+@{
+    ViewData["Title"] = "Analyze a profile";
+}
+
+<h1>Analyze a GitHub profile</h1>
+<p class="lead">Enter a username to see their public repositories ranked by stars, then analyze the strongest ones — and build a portfolio from them.</p>
+
+<form class="analyze-form" method="get">
+    <div class="form-row">
+        <input class="input" type="text" name="user" value="@Model.User"
+               placeholder="e.g. torvalds" autocomplete="off" spellcheck="false" autofocus />
+        <button class="btn btn-primary" type="submit">List repositories</button>
+    </div>
+</form>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger">@Model.ErrorMessage</div>
+}
+
+@if (!string.IsNullOrEmpty(Model.User) && Model.Repos.Count == 0 && string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="empty-prompt">
+        <p>No public, non-fork repositories found for <strong>@Model.User</strong>.</p>
+    </div>
+}
+
+@if (Model.Repos.Count > 0)
+{
+    <div class="recent-head" style="margin-top:1.5rem">
+        <span class="recent-title">@Model.Repos.Count repositories for @Model.User — strongest first</span>
+        <a class="recent-all" asp-page="/Portfolio">Build a portfolio →</a>
+    </div>
+    <div class="profile-grid">
+        @foreach (var repo in Model.Repos.Take(48))
+        {
+            <div class="profile-card">
+                <div class="profile-card-head">
+                    <a class="profile-name" asp-page="/Analysis" asp-route-owner="@repo.Owner" asp-route-repo="@repo.Name">@repo.Name</a>
+                    <span class="profile-stars" title="Stars">★ @repo.Stars.ToString("N0")</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(repo.Description))
+                {
+                    <p class="profile-desc">@repo.Description</p>
+                }
+                <div class="profile-meta">
+                    @if (!string.IsNullOrEmpty(repo.Language))
+                    {
+                        <span class="profile-lang">@repo.Language</span>
+                    }
+                    @if (repo.UpdatedAt is not null)
+                    {
+                        <span class="muted">Updated @repo.UpdatedAt.Value.ToString("MMM yyyy")</span>
+                    }
+                    <a class="profile-analyze" asp-page="/Analysis" asp-route-owner="@repo.Owner" asp-route-repo="@repo.Name">Analyze →</a>
+                </div>
+            </div>
+        }
+    </div>
+    <p class="hint" style="margin-top:1rem">Tip: analyze your strongest few, then open <a asp-page="/Portfolio">Portfolio</a> to synthesize one story across them.</p>
+}

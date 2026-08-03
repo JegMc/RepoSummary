@@ -104,5 +104,4 @@ Phase 7 items (GitHub OAuth, hosting, user accounts).
 
 ## License
 
-No license is set yet, so default copyright applies. Add a `LICENSE` (MIT is a common choice for a
-portfolio project) if you'd like others to reuse the code.
+Released under the [MIT License](./LICENSE).

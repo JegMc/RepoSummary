@@ -642,6 +642,11 @@ code, .mono {
 /* Coaching card */
 .card.coach { border-left: 3px solid #d4a72c; background: color-mix(in srgb, #d4a72c 7%, var(--canvas)); padding-left: 1.35rem; }
 
+/* Fact-check card (F1): amber when there are flags, green when everything checks out. */
+.card.factcheck { padding-left: 1.35rem; }
+.card.factcheck.flag { border-left: 3px solid #d4a72c; background: color-mix(in srgb, #d4a72c 7%, var(--canvas)); }
+.card.factcheck.ok { border-left: 3px solid #2da44e; background: color-mix(in srgb, #2da44e 6%, var(--canvas)); }
+
 /* "Raise your grade" — one collapsible how-to per unchecked maturity signal. */
 .howto-list { display: flex; flex-direction: column; gap: .4rem; margin-top: .2rem; }
 .howto { border: 1px solid var(--border); border-radius: var(--radius); background: var(--canvas); }
@@ -1199,6 +1204,8 @@ details.how[open] summary { margin-bottom: .5rem; }
 .keyfile-icon { flex: none; fill: var(--fg-muted); }
 .keyfile-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .keyfile-reason { flex: none; font-size: .7rem; color: var(--fg-muted); text-transform: uppercase; letter-spacing: .04em; }
+.keyfile-explain { flex: none; font: inherit; font-size: .72rem; font-weight: 600; cursor: pointer; color: var(--fg-muted); background: var(--canvas); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; }
+.keyfile-explain:hover { color: var(--accent); border-color: var(--accent); }
 
 /* Ask this repo */
 .ask-form { margin-top: .5rem; }

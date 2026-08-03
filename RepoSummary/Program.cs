@@ -112,7 +112,10 @@ app.MapPost("/generate/stream", async (
     if (types.Count == 0) types = new() { "ResumeBullet", "ProjectSummary" };
     var job = form["GenJob"].ToString();
     if (!string.IsNullOrWhiteSpace(job))
-        types.Add(form["GenCategory"].ToString() == "interview" ? "JobFitGaps" : "HireabilityTips");
+    {
+        if (form["GenCategory"].ToString() == "interview") { types.Add("JobFitGaps"); types.Add("RoleFitScore"); }
+        else types.Add("HireabilityTips");
+    }
 
     var options = new GenerationOptions
     {

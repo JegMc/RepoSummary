@@ -23,7 +23,7 @@ public class GenerationOptions
     {
         "ResumeBullet", "InterviewStory", "ProjectSummary",
         "CoverLetter", "LinkedInAbout", "TechnicalCaseStudy", "ReadmeImprovements", "FullReadme",
-        "LikelyQuestions", "JobFitGaps", "HireabilityTips", "PortfolioNarrative"
+        "LikelyQuestions", "JobFitGaps", "HireabilityTips", "RoleFitScore", "PortfolioNarrative"
     };
 
     /// <summary>The types the user can pick directly (gap/hireability are added automatically with a job description).</summary>

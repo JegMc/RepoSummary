@@ -19,12 +19,13 @@
         "ReadmeImprovements" => "README improvements",
         "FullReadme" => "Full README draft",
         "LikelyQuestions" => "Likely questions about this repo",
+        "RoleFitScore" => "Role fit score",
         _ => type
     };
 
     // Which generated artifact types belong to each prep workspace.
     string[] ResumeArtifactTypes = { "ResumeBullet", "ProjectSummary", "CoverLetter", "LinkedInAbout", "TechnicalCaseStudy", "ReadmeImprovements", "FullReadme", "HireabilityTips" };
-    string[] InterviewArtifactTypes = { "InterviewStory", "LikelyQuestions", "JobFitGaps" };
+    string[] InterviewArtifactTypes = { "InterviewStory", "LikelyQuestions", "RoleFitScore", "JobFitGaps" };
     string[] ResumeSelectable = { "ResumeBullet", "ProjectSummary", "CoverLetter", "LinkedInAbout", "TechnicalCaseStudy", "ReadmeImprovements", "FullReadme" };
 
     // Sticky form state: reflect the posted selection only for the workspace that was submitted.
@@ -315,6 +316,8 @@ else
 
                                     <label class="gen-check"><input type="checkbox" name="GenAts" value="true" checked="@(Model.GenCategory == "resume" && Model.Options.AtsOptimize)" /> Optimize for ATS <span class="gen-note">— keyword-dense, screener-friendly bullets</span></label>
 
+                                    <label class="gen-check"><input type="checkbox" name="GenFactCheck" value="true" checked="@(Model.GenCategory == "resume" && Model.GenFactCheck)" /> Fact-check against evidence <span class="gen-note">— flags any unsupported claim (one extra AI call)</span></label>
+
                                     <label class="gen-check gen-stream"><input type="checkbox" name="GenStream" value="true" /> Stream it live</label>
                                     <p class="stream-note"><strong>Leave off for clean, formatted results.</strong> Turn on to watch the text type out live — but it appears as raw, unformatted text (OpenAI only).</p>
                                 </div>
@@ -338,6 +341,11 @@ else
                         }
                     }
                 </div>
+
+                @if (Model.FactChecked && Model.GenCategory == "resume")
+                {
+                    <partial name="_FactCheck" model="Model.FactCheckNotes" />
+                }
 
                 @if (r.ResumeAngles.Count > 0)
                 {
@@ -420,6 +428,8 @@ else
                                         <textarea class="input gen-jd-text" name="GenJob" rows="5" placeholder="Paste the job description here…" spellcheck="false">@JdOf("interview")</textarea>
                                     </details>
 
+                                    <label class="gen-check"><input type="checkbox" name="GenFactCheck" value="true" checked="@(Model.GenCategory == "interview" && Model.GenFactCheck)" /> Fact-check against evidence <span class="gen-note">— flags any unsupported claim (one extra AI call)</span></label>
+
                                     <label class="gen-check gen-stream"><input type="checkbox" name="GenStream" value="true" /> Stream it live</label>
                                     <p class="stream-note"><strong>Leave off for clean, formatted results.</strong> Turn on to watch the text type out live — but it appears as raw, unformatted text (OpenAI only).</p>
                                 </div>
@@ -443,6 +453,11 @@ else
                         }
                     }
                 </div>
+
+                @if (Model.FactChecked && Model.GenCategory == "interview")
+                {
+                    <partial name="_FactCheck" model="Model.FactCheckNotes" />
+                }
 
                 @if (r.InterviewTalkingPoints.Count > 0)
                 {
@@ -547,6 +562,10 @@ else
                                         <span class="mono keyfile-path">@kf.Path</span>
                                     }
                                     <span class="keyfile-reason">@kf.Reason</span>
+                                    @if (Model.AiConfigured)
+                                    {
+                                        <button type="button" class="keyfile-explain" data-explain="@kf.Path" title="Ask AI to explain this file">Explain</button>
+                                    }
                                 </div>
                             }
                         </div>

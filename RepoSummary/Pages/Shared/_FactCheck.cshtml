@@ -1,0 +1,19 @@
+@model List<string>
+@* Second-pass fact-check results (F1): unsupported claims flagged against the evidence. *@
+<div class="card factcheck @(Model.Count == 0 ? "ok" : "flag")">
+    <h2>Fact-check</h2>
+    @if (Model.Count == 0)
+    {
+        <p class="hint">✓ Every generated claim traces to the evidence.</p>
+    }
+    else
+    {
+        <p class="hint">@Model.Count statement@(Model.Count == 1 ? "" : "s") worth double-checking before you use @(Model.Count == 1 ? "it" : "them"):</p>
+        <ul class="clean">
+            @foreach (var note in Model)
+            {
+                <li>@note</li>
+            }
+        </ul>
+    }
+</div>

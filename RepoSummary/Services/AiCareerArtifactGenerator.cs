@@ -268,7 +268,7 @@ public class AiCareerArtifactGenerator : ICareerArtifactGenerator
 
         if (ActiveProvider == AiProviderStore.Anthropic)
         {
-            yield return await AnswerWithAnthropicAsync(user, cancellationToken);
+            yield return await AnthropicOneShotAsync(QaSystemPrompt, user, 2048, cancellationToken);
             yield break;
         }
 
@@ -276,7 +276,7 @@ public class AiCareerArtifactGenerator : ICareerArtifactGenerator
             yield return piece;
     }
 
-    private async Task<string> AnswerWithAnthropicAsync(string user, CancellationToken ct)
+    private async Task<string> AnthropicOneShotAsync(string system, string user, int maxTokens, CancellationToken ct)
     {
         try
         {
@@ -284,8 +284,8 @@ public class AiCareerArtifactGenerator : ICareerArtifactGenerator
             var response = await client.Messages.Create(new MessageCreateParams
             {
                 Model = AnthropicModel,
-                MaxTokens = 2048,
-                System = QaSystemPrompt,
+                MaxTokens = maxTokens,
+                System = system,
                 Messages = [new() { Role = Role.User, Content = user }]
             }, ct);
             return response.Content.Select(b => b.Value).OfType<TextBlock>().FirstOrDefault()?.Text
@@ -294,8 +294,74 @@ public class AiCareerArtifactGenerator : ICareerArtifactGenerator
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Anthropic Q&A failed.");
-            return "Something went wrong answering that — this can be a rate limit or a temporary API issue. Please try again.";
+            _logger.LogError(ex, "Anthropic one-shot call failed.");
+            return "Something went wrong — this can be a rate limit or a temporary API issue. Please try again.";
+        }
+    }
+
+    /// <summary>One-shot plain-text completion for either provider (used by the fact-checker).</summary>
+    private async Task<string> CompleteAsync(string system, string user, int maxTokens, CancellationToken ct)
+    {
+        if (ActiveProvider == AiProviderStore.Anthropic)
+            return await AnthropicOneShotAsync(system, user, maxTokens, ct);
+
+        var sb = new StringBuilder();
+        await foreach (var piece in StreamOpenAiChatAsync(system, user, maxTokens, ct))
+            sb.Append(piece);
+        return sb.ToString();
+    }
+
+    // ---------------- Fact-check (verify claims against evidence) ----------------
+
+    private const string VerifySystemPrompt =
+        """
+        You are a strict fact-checker. You are given EVIDENCE extracted from a GitHub repository
+        and a set of GENERATED career claims about it. Your only job is to flag statements in the
+        generated text that the evidence does NOT support, that exaggerate, or that invent
+        specifics (technologies, metrics, outcomes, scale) not present in the evidence.
+
+        Output rules:
+        - Return a plain Markdown bullet list. Each bullet: the exact quoted phrase, then " — " and a
+          short reason it isn't supported.
+        - Judge ONLY against the evidence provided. If a claim is fully supported, do not mention it.
+        - If every claim is supported by the evidence, output the single line: ALL SUPPORTED
+        - Be terse. No preamble, no headings.
+        """;
+
+    public async Task<ServiceResult<List<string>>> VerifyAsync(
+        GitHubRepoAnalysisResult analysis, IReadOnlyList<GeneratedCareerArtifact> artifacts, CancellationToken cancellationToken = default)
+    {
+        if (ActiveProvider is null)
+            return ServiceResult<List<string>>.Fail("Add an OpenAI or Anthropic API key to enable fact-checking.");
+        if (artifacts.Count == 0)
+            return ServiceResult<List<string>>.Ok(new());
+
+        var sb = new StringBuilder();
+        AppendEvidenceContext(sb, analysis, new GenerationOptions());
+        sb.AppendLine("\nGENERATED CLAIMS TO CHECK:");
+        var n = 1;
+        foreach (var a in artifacts)
+            sb.AppendLine($"{n++}. [{a.ArtifactType}] {a.Content}");
+
+        try
+        {
+            var text = await CompleteAsync(VerifySystemPrompt, sb.ToString(), 1200, cancellationToken);
+            if (text.Contains("ALL SUPPORTED", StringComparison.OrdinalIgnoreCase))
+                return ServiceResult<List<string>>.Ok(new());
+
+            var concerns = text.Replace("\r\n", "\n").Split('\n')
+                .Select(l => l.Trim())
+                .Where(l => l.StartsWith("-") || l.StartsWith("*") || l.StartsWith("•"))
+                .Select(l => l.TrimStart('-', '*', '•', ' '))
+                .Where(l => l.Length > 0)
+                .ToList();
+            return ServiceResult<List<string>>.Ok(concerns);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Fact-check failed for {Repo}.", analysis.FullName);
+            return ServiceResult<List<string>>.Fail("Couldn't complete the fact-check — please try again.");
         }
     }
 
@@ -479,6 +545,12 @@ public class AiCareerArtifactGenerator : ICareerArtifactGenerator
           story), write 2-4 short paragraphs separated by a blank line — never one long slab.
         - Never indent lines with tabs or leading spaces (indentation renders as a code block). Start
           every line flush left.
+
+        Calibrate résumé bullets to this level of specificity (a model of quality — never copy its
+        content, only its shape): "Built an ASP.NET Core Razor Pages app on .NET 10 with an EF
+        Core/SQLite persistence layer and a typed GitHub API client, covered by 60+ unit tests."
+        Notice: a concrete action verb, named technologies from the evidence, and a real detail — no
+        vague adjectives, no invented metrics.
         """;
 
     // Per-type production instructions.
@@ -494,6 +566,7 @@ public class AiCareerArtifactGenerator : ICareerArtifactGenerator
         "FullReadme" => "1 FullReadme artifact: a complete, ready-to-paste README.md in GitHub-flavored Markdown — a title, a one-line tagline, a short overview, a Tech Stack section (as a bullet list or table from the detected languages/dependencies), a Getting Started section with install/run steps inferred from the manifests, a Project Structure note, and a Features list. Use only what the evidence supports; where a real command isn't knowable, use a clearly-generic placeholder.",
         "LikelyQuestions" => "1 LikelyQuestions artifact: 5-7 questions an interviewer would realistically ask about THIS specific project (grounded in the code, architecture, and choices visible in the evidence), each as a '- ' bullet followed by a one-sentence italic hint on how to answer it well. Make them specific to this repo, not generic.",
         "JobFitGaps" => "1 JobFitGaps artifact: an honest, specific list of gaps between the target job and what this repo demonstrates — what's missing or weak for THIS role.",
+        "RoleFitScore" => "1 RoleFitScore artifact: start the content with exactly one line 'Fit score: N/100' (N = an honest 0-100 estimate of how well THIS repo's demonstrated skills match the target job), then 2-3 sentences justifying the number from the evidence and naming the single biggest lever to raise it. Be candid — a thin repo against a senior role should score low.",
         "HireabilityTips" => "1 HireabilityTips artifact: a short, prioritized list of concrete changes to the project that would make the candidate more competitive for THIS role.",
         "PortfolioNarrative" => "1 PortfolioNarrative artifact: 3-5 sentences describing the developer's overall body of work across these projects and the through-line in their skills.",
         _ => $"1 {type} artifact."

@@ -43,4 +43,11 @@ public interface ICareerArtifactGenerator
         GitHubRepoAnalysisResult analysis,
         string question,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Second-pass fact-check: returns generated statements the evidence doesn't support
+    /// (empty list = everything checks out).</summary>
+    Task<ServiceResult<List<string>>> VerifyAsync(
+        GitHubRepoAnalysisResult analysis,
+        IReadOnlyList<GeneratedCareerArtifact> artifacts,
+        CancellationToken cancellationToken = default);
 }

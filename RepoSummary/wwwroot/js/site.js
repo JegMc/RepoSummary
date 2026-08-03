@@ -341,6 +341,21 @@
     askRepo(form);
   });
 
+  // "Explain this file" — jump to the Ask tab with a preset question, then run it.
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-explain]");
+    if (!btn) return;
+    e.preventDefault();
+    var path = btn.getAttribute("data-explain");
+    var askTab = document.querySelector('.tab-btn[data-tab="ask"]');
+    if (askTab) askTab.click();
+    var form = document.querySelector("[data-ask-form]");
+    if (!form) return;
+    var input = form.querySelector("[data-ask-input]");
+    if (input) input.value = "Explain what " + path + " does and how it works.";
+    askRepo(form);
+  });
+
   // ---------- Mermaid architecture diagram (bundled locally; progressive enhancement) ----------
   if (window.mermaid && document.querySelector(".mermaid")) {
     try {

@@ -59,6 +59,11 @@ public class AnalysisModel : PageModel
     [BindProperty] public string? GenJob { get; set; }
     [BindProperty] public string? GenCategory { get; set; }   // "resume" | "interview"
     [BindProperty] public bool GenAts { get; set; }
+    [BindProperty] public bool GenFactCheck { get; set; }
+
+    // Fact-check (F1) results for the just-generated set.
+    public bool FactChecked { get; private set; }
+    public List<string> FactCheckNotes { get; private set; } = new();
     public GenerationOptions Options { get; private set; } = new();
 
     /// <summary>Which tab to open on load ("resume" default; the just-generated one after a POST).</summary>
@@ -150,9 +155,12 @@ public class AnalysisModel : PageModel
             ? new List<string>(GenTypes)
             : (interview ? new List<string> { "InterviewStory" } : new List<string> { "ResumeBullet", "ProjectSummary" });
 
-        // Add the job-tailored extra relevant to this workspace when a JD is provided.
+        // Add the job-tailored extras relevant to this workspace when a JD is provided.
         if (!string.IsNullOrWhiteSpace(GenJob))
-            types.Add(interview ? "JobFitGaps" : "HireabilityTips");
+        {
+            if (interview) { types.Add("JobFitGaps"); types.Add("RoleFitScore"); }
+            else types.Add("HireabilityTips");
+        }
 
         Options = new GenerationOptions
         {
@@ -171,6 +179,14 @@ public class AnalysisModel : PageModel
             var stories = Artifacts!.Where(a => a.ArtifactType == "InterviewStory").ToList();
             if (stories.Count > 0)
                 await _store.SaveStoriesAsync(Result.FullName, stories, ct);
+
+            // Optional second-pass fact-check against the evidence.
+            if (GenFactCheck && Artifacts.Count > 0)
+            {
+                FactChecked = true;
+                var verdict = await _generator.VerifyAsync(Result, Artifacts, ct);
+                if (verdict.Success) FactCheckNotes = verdict.Value!;
+            }
         }
         else
         {

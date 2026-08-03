@@ -9,7 +9,16 @@ maturity score, architecture and data-model diagrams, "ask this repo" code Q&A, 
 material that **cites the evidence behind every claim**. If it can't point to something in the
 repo, it won't say it.
 
-<!-- Add a screenshot when you have one, e.g.:  ![Analysis page](docs/analysis.png)  -->
+## Screenshots
+
+> _Screenshots coming soon — drop images in [`docs/`](./docs) and uncomment the tags below._
+
+<!--
+![Analysis page](docs/analysis.png)
+![Architecture diagram](docs/diagram.png)
+![Ask this repo](docs/ask.png)
+-->
+
 
 ## Features
 

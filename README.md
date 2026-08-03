@@ -11,9 +11,11 @@ repo, it won't say it.
 
 ## Screenshots
 
-> _Screenshots coming soon — drop images in [`docs/`](./docs) and uncomment the tags below._
+_Real screenshots coming soon — for now, the app mark:_
 
-<!--
+<p align="center"><img src="docs/logo.svg" width="96" alt="RepoSummary logo"></p>
+
+<!-- Add real screenshots to docs/ and uncomment:
 ![Analysis page](docs/analysis.png)
 ![Architecture diagram](docs/diagram.png)
 ![Ask this repo](docs/ask.png)

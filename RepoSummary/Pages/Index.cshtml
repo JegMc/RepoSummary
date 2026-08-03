@@ -26,7 +26,8 @@
     <form class="analyze-form" method="post" data-loading="Analyzing…">
         <div class="form-row">
             <input class="input" type="text" name="RepoInput" value="@Model.RepoInput"
-                   placeholder="e.g. dotnet/aspnetcore" autocomplete="off" spellcheck="false" autofocus data-repo-input />
+                   placeholder="e.g. dotnet/aspnetcore" autocomplete="off" spellcheck="false" autofocus data-repo-input
+                   aria-label="GitHub repository — owner/repo or a URL" />
             <button class="btn btn-primary" type="submit">Analyze</button>
         </div>
         <div class="hint">

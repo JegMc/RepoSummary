@@ -10,7 +10,7 @@ public class GitHubRepositoryService : IGitHubRepositoryService
     private readonly HttpClient _http;
     private readonly ILogger<GitHubRepositoryService> _logger;
     private readonly GitHubRateLimitStore _rateLimit;
-    private readonly GitHubTokenStore _tokens;
+    private readonly IGitHubTokenSource _tokens;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -21,7 +21,7 @@ public class GitHubRepositoryService : IGitHubRepositoryService
         HttpClient http,
         ILogger<GitHubRepositoryService> logger,
         GitHubRateLimitStore rateLimit,
-        GitHubTokenStore tokens)
+        IGitHubTokenSource tokens)
     {
         _http = http;
         _logger = logger;

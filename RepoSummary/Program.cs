@@ -42,6 +42,7 @@ builder.Services.AddSingleton<GitHubUrlParser>();
 // Secrets entered on the Settings page (encrypted at rest, never committed) +
 // AI provider preference + rate-limit tracking.
 builder.Services.AddSingleton<GitHubTokenStore>();
+builder.Services.AddSingleton<IGitHubTokenSource>(sp => sp.GetRequiredService<GitHubTokenStore>());
 builder.Services.AddSingleton<OpenAiKeyStore>();
 builder.Services.AddSingleton<AnthropicKeyStore>();
 builder.Services.AddSingleton<AiProviderStore>();

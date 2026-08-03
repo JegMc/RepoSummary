@@ -10,7 +10,8 @@
 <form class="analyze-form" method="get">
     <div class="form-row">
         <input class="input" type="text" name="user" value="@Model.User"
-               placeholder="e.g. torvalds" autocomplete="off" spellcheck="false" autofocus />
+               placeholder="e.g. torvalds" autocomplete="off" spellcheck="false" autofocus
+               aria-label="GitHub username" />
         <button class="btn btn-primary" type="submit">List repositories</button>
     </div>
 </form>

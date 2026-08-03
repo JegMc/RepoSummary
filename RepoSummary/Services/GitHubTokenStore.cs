@@ -2,6 +2,13 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace RepoSummary.Services;
 
+/// <summary>Just whether a GitHub token is configured — the only thing the repo service needs,
+/// and easy to fake in tests.</summary>
+public interface IGitHubTokenSource
+{
+    bool HasValue { get; }
+}
+
 /// <summary>
 /// Base for secrets a user enters at runtime (on the Settings page). Kept in memory
 /// for fast access and persisted encrypted-at-rest (ASP.NET Data Protection) to a
@@ -9,7 +16,7 @@ namespace RepoSummary.Services;
 /// The encryption keys are scoped to this machine/user, so the saved file can't be
 /// decrypted anywhere else. Seeded from configuration on first run if a file exists.
 /// </summary>
-public abstract class EncryptedSecretStore
+public abstract class EncryptedSecretStore : IGitHubTokenSource
 {
     private readonly IDataProtector _protector;
     private readonly ILogger _logger;

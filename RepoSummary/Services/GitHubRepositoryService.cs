@@ -10,6 +10,7 @@ public class GitHubRepositoryService : IGitHubRepositoryService
     private readonly HttpClient _http;
     private readonly ILogger<GitHubRepositoryService> _logger;
     private readonly GitHubRateLimitStore _rateLimit;
+    private readonly GitHubTokenStore _tokens;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,11 +20,13 @@ public class GitHubRepositoryService : IGitHubRepositoryService
     public GitHubRepositoryService(
         HttpClient http,
         ILogger<GitHubRepositoryService> logger,
-        GitHubRateLimitStore rateLimit)
+        GitHubRateLimitStore rateLimit,
+        GitHubTokenStore tokens)
     {
         _http = http;
         _logger = logger;
         _rateLimit = rateLimit;
+        _tokens = tokens;
     }
 
     /// <summary>GET wrapper that records the GitHub rate-limit headers on every response.</summary>
@@ -99,9 +102,27 @@ public class GitHubRepositoryService : IGitHubRepositoryService
 
             // 2. Secondary calls. Each is best-effort — a failure just leaves that
             //    section empty rather than failing the whole page.
-            result.ReadmeContent = await TryGetReadmeAsync(basePath, cancellationToken);
-            result.RecentCommits = await TryGetCommitsAsync(basePath, cancellationToken);
-            result.Languages = await TryGetLanguagesAsync(basePath, cancellationToken);
+            //    When authenticated, one GraphQL call replaces the README + languages + commits +
+            //    releases REST calls (four → one); otherwise we use the REST endpoints.
+            var core = _tokens.HasValue
+                ? await TryGetCoreViaGraphQlAsync(reference, cancellationToken)
+                : null;
+
+            if (core is not null)
+            {
+                result.ReadmeContent = core.Readme ?? await TryGetReadmeAsync(basePath, cancellationToken);
+                result.RecentCommits = core.Commits;
+                result.Languages = core.Languages;
+                result.ReleaseCount = core.ReleaseCount;
+                result.LatestReleaseName = core.LatestReleaseName;
+                result.LatestReleaseDate = core.LatestReleaseDate;
+            }
+            else
+            {
+                result.ReadmeContent = await TryGetReadmeAsync(basePath, cancellationToken);
+                result.RecentCommits = await TryGetCommitsAsync(basePath, cancellationToken);
+                result.Languages = await TryGetLanguagesAsync(basePath, cancellationToken);
+            }
             result.TopLevelItems = await TryGetContentsAsync(basePath, cancellationToken);
 
             // Recursive tree = the whole file structure in ONE call. This is what
@@ -109,6 +130,17 @@ public class GitHubRepositoryService : IGitHubRepositoryService
             // workflow under .github/workflows) instead of only the top level.
             var (paths, truncated, blobs) = await TryGetRecursiveTreeAsync(
                 basePath, result.DefaultBranch, cancellationToken);
+
+            // Very large repos: cap what we keep so memory, the stored JSON snapshot, and the
+            // file explorer stay bounded. We flag truncation so the UI can say so.
+            if (paths.Count > MaxTrackedPaths)
+            {
+                paths = paths.Take(MaxTrackedPaths).ToList();
+                truncated = true;
+            }
+            if (blobs.Count > MaxScannedBlobs)
+                blobs = blobs.Take(MaxScannedBlobs).ToList();
+
             result.AllPaths = paths;
             result.TreeTruncated = truncated;
 
@@ -121,10 +153,13 @@ public class GitHubRepositoryService : IGitHubRepositoryService
 
             // What the CI actually does + shipping signals.
             result.Workflows = await TryGetWorkflowsAsync(basePath, paths, cancellationToken);
-            var (relCount, relName, relDate) = await TryGetReleasesAsync(basePath, cancellationToken);
-            result.ReleaseCount = relCount;
-            result.LatestReleaseName = relName;
-            result.LatestReleaseDate = relDate;
+            if (core is null)   // GraphQL already fetched releases when authenticated
+            {
+                var (relCount, relName, relDate) = await TryGetReleasesAsync(basePath, cancellationToken);
+                result.ReleaseCount = relCount;
+                result.LatestReleaseName = relName;
+                result.LatestReleaseDate = relDate;
+            }
             result.HasChangelog = paths.Any(p =>
             {
                 var n = p.Split('/').Last();
@@ -380,6 +415,11 @@ public class GitHubRepositoryService : IGitHubRepositoryService
     // Reading file contents costs one API call each, so cap how many we fetch.
     private const int MaxManifestReads = 8;
 
+    // Very-large-repo guards: bound how many paths we keep and how many blobs we scan for
+    // key-file selection, so a monorepo with 100k+ files can't blow up memory or the DB snapshot.
+    private const int MaxTrackedPaths = 20000;
+    private const int MaxScannedBlobs = 20000;
+
     /// <summary>
     /// Reads a bounded set of manifest files and extracts declared dependencies
     /// (with versions where the manifest states them).
@@ -462,6 +502,116 @@ public class GitHubRepositoryService : IGitHubRepositoryService
         {
             _logger.LogDebug(ex, "Could not fetch releases for {Base}", basePath);
             return (null, null, null);
+        }
+    }
+
+    // One GraphQL query that replaces the README + languages + commits + releases REST calls
+    // (four calls → one). GitHub's GraphQL API requires a token, so this only runs when one is
+    // configured; any failure returns null and the caller falls back to the REST path.
+    private const string CoreGraphQlQuery =
+        "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){" +
+        "languages(first:10,orderBy:{field:SIZE,direction:DESC}){edges{size node{name}}totalSize}" +
+        "readme:object(expression:\"HEAD:README.md\"){... on Blob{text}}" +
+        "releases(first:10){totalCount nodes{name tagName publishedAt}}" +
+        "defaultBranchRef{target{... on Commit{history(first:10){nodes{oid messageHeadline committedDate url}}}}}" +
+        "}}";
+
+    private sealed record GraphQlCore(
+        string? Readme, List<GitHubLanguageSummary> Languages, List<GitHubCommitSummary> Commits,
+        int? ReleaseCount, string? LatestReleaseName, DateTimeOffset? LatestReleaseDate);
+
+    private async Task<GraphQlCore?> TryGetCoreViaGraphQlAsync(RepoReference reference, CancellationToken ct)
+    {
+        try
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                query = CoreGraphQlQuery,
+                variables = new { owner = reference.Owner, name = reference.Repo }
+            });
+            using var request = new HttpRequestMessage(HttpMethod.Post, "graphql")
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+            var response = await _http.SendAsync(request, ct);
+            CaptureRateLimit(response);
+            if (!response.IsSuccessStatusCode) return null;
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("errors", out _)) return null;
+            if (!root.TryGetProperty("data", out var data) ||
+                !data.TryGetProperty("repository", out var repo) || repo.ValueKind != JsonValueKind.Object)
+                return null;
+
+            // Languages
+            var languages = new List<GitHubLanguageSummary>();
+            if (repo.TryGetProperty("languages", out var langs))
+            {
+                long total = langs.TryGetProperty("totalSize", out var ts) ? ts.GetInt64() : 0;
+                if (langs.TryGetProperty("edges", out var edges) && edges.ValueKind == JsonValueKind.Array)
+                    foreach (var e in edges.EnumerateArray())
+                    {
+                        var size = e.TryGetProperty("size", out var sz) ? sz.GetInt64() : 0;
+                        var name = e.GetProperty("node").GetProperty("name").GetString() ?? "";
+                        if (name.Length == 0 || total == 0) continue;
+                        languages.Add(new GitHubLanguageSummary
+                        {
+                            Name = name, Bytes = size, Percentage = Math.Round(size * 100.0 / total, 1)
+                        });
+                    }
+            }
+
+            // README
+            string? readme = null;
+            if (repo.TryGetProperty("readme", out var rd) && rd.ValueKind == JsonValueKind.Object &&
+                rd.TryGetProperty("text", out var rt) && rt.ValueKind == JsonValueKind.String)
+                readme = rt.GetString();
+
+            // Releases
+            int? releaseCount = null; string? relName = null; DateTimeOffset? relDate = null;
+            if (repo.TryGetProperty("releases", out var rel))
+            {
+                releaseCount = rel.TryGetProperty("totalCount", out var rc) ? rc.GetInt32() : 0;
+                if (rel.TryGetProperty("nodes", out var rnodes) && rnodes.ValueKind == JsonValueKind.Array &&
+                    rnodes.GetArrayLength() > 0)
+                {
+                    var first = rnodes[0];
+                    relName = (first.TryGetProperty("name", out var rn) ? rn.GetString() : null);
+                    if (string.IsNullOrWhiteSpace(relName) && first.TryGetProperty("tagName", out var tn)) relName = tn.GetString();
+                    if (first.TryGetProperty("publishedAt", out var pa) && pa.ValueKind == JsonValueKind.String &&
+                        DateTimeOffset.TryParse(pa.GetString(), out var pd)) relDate = pd;
+                }
+            }
+
+            // Recent commits
+            var commits = new List<GitHubCommitSummary>();
+            if (repo.TryGetProperty("defaultBranchRef", out var dbr) && dbr.ValueKind == JsonValueKind.Object &&
+                dbr.TryGetProperty("target", out var target) &&
+                target.TryGetProperty("history", out var hist) &&
+                hist.TryGetProperty("nodes", out var cnodes) && cnodes.ValueKind == JsonValueKind.Array)
+                foreach (var c in cnodes.EnumerateArray())
+                {
+                    var summary = new GitHubCommitSummary
+                    {
+                        Sha = c.TryGetProperty("oid", out var oid) ? oid.GetString() ?? "" : "",
+                        Message = c.TryGetProperty("messageHeadline", out var mh) ? mh.GetString() ?? "" : "",
+                        HtmlUrl = c.TryGetProperty("url", out var u) ? u.GetString() : null
+                    };
+                    if (c.TryGetProperty("committedDate", out var cd) && cd.ValueKind == JsonValueKind.String &&
+                        DateTimeOffset.TryParse(cd.GetString(), out var dt)) summary.Date = dt;
+                    commits.Add(summary);
+                }
+
+            return new GraphQlCore(readme, languages, commits, releaseCount, relName, relDate);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "GraphQL core fetch failed for {Owner}/{Repo}; falling back to REST.",
+                reference.Owner, reference.Repo);
+            return null;
         }
     }
 

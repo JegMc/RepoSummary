@@ -23,6 +23,9 @@ coverage*.json
 *.db-shm
 *.db-wal
 
+# ---- Data Protection key ring (encrypts the saved secrets; machine-scoped) ----
+.dpkeys/
+
 # ---- Secrets saved via the Settings page (encrypted, per-machine) — never commit ----
 .githubtoken
 .anthropickey

@@ -144,7 +144,16 @@ else
     {
         <div class="saved-banner">
             <span>Viewing a saved snapshot@(Model.SavedAt is not null ? $" from {Model.SavedAt.Value.ToLocalTime():MMM d, yyyy}" : "").</span>
-            <a asp-page="/Analysis" asp-route-owner="@r.Owner" asp-route-repo="@r.Name">Re-analyze for fresh data →</a>
+            <a asp-page="/Analysis" asp-route-owner="@r.Owner" asp-route-repo="@r.Name" asp-route-fresh="true">Re-analyze for fresh data →</a>
+        </div>
+    }
+    else if (Model.ServedFromCache)
+    {
+        <div class="saved-banner">
+            <span>
+                Loaded instantly from your last analysis@(Model.SavedAt is not null ? $" ({Model.SavedAt.Value.ToLocalTime():MMM d, h:mm tt})" : "").@(Model.RefreshingInBackground ? " Fresh data is being fetched in the background — reload shortly to see it." : "")
+            </span>
+            <a asp-page="/Analysis" asp-route-owner="@r.Owner" asp-route-repo="@r.Name" asp-route-fresh="true">Re-analyze now →</a>
         </div>
     }
 

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Caching.Memory;
@@ -12,19 +13,26 @@ public class AnalysisModel : PageModel
     private readonly ICareerArtifactGenerator _generator;
     private readonly IAnalysisStore _store;
     private readonly IMemoryCache _cache;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     private static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(10);
+    // Stale-while-revalidate: a snapshot younger than this is served without a background refresh.
+    private static readonly TimeSpan FreshWindow = TimeSpan.FromMinutes(10);
+    // Guards against firing more than one background refresh per repo at a time.
+    private static readonly ConcurrentDictionary<string, byte> Refreshing = new();
 
     public AnalysisModel(
         IGitHubRepositoryService service,
         ICareerArtifactGenerator generator,
         IAnalysisStore store,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        IServiceScopeFactory scopeFactory)
     {
         _service = service;
         _generator = generator;
         _store = store;
         _cache = cache;
+        _scopeFactory = scopeFactory;
     }
 
     public GitHubRepoAnalysisResult? Result { get; private set; }
@@ -33,6 +41,11 @@ public class AnalysisModel : PageModel
     // Set when this view is a re-opened saved snapshot rather than a fresh fetch.
     public bool IsSaved { get; private set; }
     public DateTime? SavedAt { get; private set; }
+
+    // Stale-while-revalidate: this view was served instantly from a saved snapshot, and
+    // (when stale) a background refresh is updating it for next time.
+    public bool ServedFromCache { get; private set; }
+    public bool RefreshingInBackground { get; private set; }
 
     // AI generation state.
     public bool AiConfigured => _generator.IsConfigured;
@@ -51,24 +64,69 @@ public class AnalysisModel : PageModel
     /// <summary>Which tab to open on load ("resume" default; the just-generated one after a POST).</summary>
     public string ActiveTab { get; private set; } = "resume";
 
-    public async Task<IActionResult> OnGetAsync(string? owner, string? repo, bool saved, CancellationToken ct)
+    public async Task<IActionResult> OnGetAsync(string? owner, string? repo, bool saved, bool fresh, CancellationToken ct)
     {
-        // Re-open a saved snapshot instantly (no GitHub calls) when asked.
-        if (saved && !string.IsNullOrWhiteSpace(owner) && !string.IsNullOrWhiteSpace(repo))
+        if (!fresh && !string.IsNullOrWhiteSpace(owner) && !string.IsNullOrWhiteSpace(repo))
         {
-            var snapshot = await _store.GetSavedAsync(owner, repo, ct);
-            if (snapshot is not null)
+            // Re-open a saved snapshot instantly (no GitHub calls) when explicitly asked.
+            if (saved)
             {
-                Result = snapshot.Result;
-                SavedAt = snapshot.AnalyzedAt;
-                IsSaved = true;
-                _cache.Set(CacheKey(owner, repo), Result, CacheFor);
-                return Page();
+                var snapshot = await _store.GetSavedAsync(owner, repo, ct);
+                if (snapshot is not null)
+                {
+                    Result = snapshot.Result;
+                    SavedAt = snapshot.AnalyzedAt;
+                    IsSaved = true;
+                    _cache.Set(CacheKey(owner, repo), Result, CacheFor);
+                    return Page();
+                }
+            }
+            else
+            {
+                // Stale-while-revalidate: if we already have a snapshot, render it instantly and,
+                // when it's older than the fresh window, refresh it in the background for next time.
+                var snapshot = await _store.GetSavedAsync(owner, repo, ct);
+                if (snapshot is not null)
+                {
+                    Result = snapshot.Result;
+                    SavedAt = snapshot.AnalyzedAt;
+                    ServedFromCache = true;
+                    _cache.Set(CacheKey(owner, repo), Result, CacheFor);
+
+                    if (DateTime.UtcNow - snapshot.AnalyzedAt > FreshWindow)
+                        RefreshingInBackground = QueueBackgroundRefresh(owner, repo);
+
+                    return Page();
+                }
             }
         }
 
         await LoadFreshAsync(owner, repo, ct);
         return Page();
+    }
+
+    /// <summary>Fire-and-forget re-analysis in its own DI scope, so a stale view refreshes for
+    /// next time without blocking this request. Deduped per repo.</summary>
+    private bool QueueBackgroundRefresh(string owner, string repo)
+    {
+        var key = $"{owner}/{repo}".ToLowerInvariant();
+        if (!Refreshing.TryAdd(key, 0)) return true;   // one already in flight
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<IGitHubRepositoryService>();
+                var store = scope.ServiceProvider.GetRequiredService<IAnalysisStore>();
+                var outcome = await svc.AnalyzeAsync(new RepoReference(owner, repo), CancellationToken.None);
+                if (outcome.Success && outcome.Value is not null)
+                    await store.SaveAnalysisAsync(outcome.Value, CancellationToken.None);
+            }
+            catch { /* best-effort background refresh */ }
+            finally { Refreshing.TryRemove(key, out _); }
+        });
+        return true;
     }
 
     public async Task<IActionResult> OnPostGenerateAsync(string? owner, string? repo, CancellationToken ct)

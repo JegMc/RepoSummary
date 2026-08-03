@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Http.Resilience;
@@ -9,6 +10,15 @@ using RepoSummary.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorPages();
+
+// Pin the Data Protection key ring to a fixed folder + application name so the keys that
+// encrypt saved API tokens survive rebuilds, output-path changes, and restarts. Without this
+// the discriminator can shift between runs and previously-saved secrets fail to decrypt
+// (they'd silently read as "not set"). Keys stay machine-scoped and are gitignored.
+builder.Services.AddDataProtection()
+    .SetApplicationName("RepoSummary")
+    .PersistKeysToFileSystem(new DirectoryInfo(
+        Path.Combine(builder.Environment.ContentRootPath, ".dpkeys")));
 
 // Local SQLite database for saved analyses + interview stories. The file is
 // created automatically on first run (no migration step for people who clone this).
